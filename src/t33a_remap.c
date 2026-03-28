@@ -47,16 +47,29 @@ static int create_uinput(void) {
     ioctl(fd, UI_SET_EVBIT, EV_SYN);
     ioctl(fd, UI_SET_EVBIT, EV_MSC);
     ioctl(fd, UI_SET_EVBIT, EV_ABS);
-    for (int i = 0; i < KEY_MAX; i++)
+
+    /* Register only alpha/num/common keys — avoid DPAD/GAMEPAD range */
+    for (int i = KEY_1; i <= KEY_0; i++)
         ioctl(fd, UI_SET_KEYBIT, i);
+    for (int i = KEY_Q; i <= KEY_P; i++)
+        ioctl(fd, UI_SET_KEYBIT, i);
+    for (int i = KEY_A; i <= KEY_L; i++)
+        ioctl(fd, UI_SET_KEYBIT, i);
+    for (int i = KEY_Z; i <= KEY_M; i++)
+        ioctl(fd, UI_SET_KEYBIT, i);
+    ioctl(fd, UI_SET_KEYBIT, KEY_ENTER);
+    ioctl(fd, UI_SET_KEYBIT, KEY_POWER);
+    ioctl(fd, UI_SET_KEYBIT, KEY_HOMEPAGE);
+    ioctl(fd, UI_SET_KEYBIT, BTN_TOUCH);
+
     ioctl(fd, UI_SET_MSCBIT, MSC_SCAN);
     ioctl(fd, UI_SET_ABSBIT, ABS_X);
     ioctl(fd, UI_SET_ABSBIT, ABS_Y);
-    ioctl(fd, UI_SET_ABSBIT, ABS_PRESSURE);
+    /* NO ABS_PRESSURE — avoids EXTERNAL_STYLUS classification */
 
     struct uinput_user_dev ud = {0};
-    snprintf(ud.name, UINPUT_MAX_NAME_SIZE, "T33A-remap");
-    ud.id.bustype = BUS_VIRTUAL;
+    snprintf(ud.name, UINPUT_MAX_NAME_SIZE, "T33A-H");
+    ud.id.bustype = BUS_BLUETOOTH;  /* match original T33A: EXTERNAL */
     ud.id.vendor  = 0x1234;
     ud.id.product = 0x5678;
     ud.id.version = 1;

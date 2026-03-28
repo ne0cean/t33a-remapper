@@ -5,6 +5,30 @@
 
 ---
 
+## [2026-03-29] (Mac / Claude Code) - [uinput 디바이스 분류 수정 + IME 복원]
+
+**완료**:
+- uinput 디바이스 분류 수정: KEY_MAX→선택적 키 등록, BUS_VIRTUAL→BUS_BLUETOOTH, ABS_PRESSURE 제거
+- Android 분류: KEYBOARD|ALPHAKEY|TOUCH|EXTERNAL (원본 T33A와 동일)
+- IME 복원: MoAKey→Samsung Honeyboard (ime set으로 꼬인 상태 복구)
+- zig cc 크로스 컴파일 도입 (Mac에서 aarch64-linux-musl static 빌드, Termux 불필요)
+- 말해보카 앱에서 3개 키 (POWER→H, HOME→1, ENTER→0) 정상 동작 확인
+
+**이슈**:
+- ime set 반복 호출로 IME가 MoAKey로 변경되어 모든 키 이벤트가 앱에 전달 안 됨 → Honeyboard 복원으로 해결
+- uinput에 KEY_MAX 전체 등록 시 GAMEPAD/DPAD 분류 → 앱에서 키 이벤트 무시됨
+- 좀비 uinput 디바이스가 소프트 키보드 숨김 유발 → kill -9로 정리
+- show_ime_with_hard_keyboard 설정 변경이 키보드 동작에 영향
+
+**교훈**:
+- 폰 IME/키보드 설정 절대 건드리지 말 것
+- 디바이스 코드 수정 시 한번에 하나만 변경
+- uinput 디바이스는 원본 디바이스와 동일한 분류가 되도록 설정해야 함
+
+**빌드**: ✅ (zig cc aarch64-linux-musl static 빌드, 폰에서 정상 작동 확인)
+
+---
+
 ## [2026-03-28] (Mac / Claude Code) - [T33A BLE Remote Key Remapper]
 
 **완료**:

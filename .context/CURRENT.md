@@ -20,7 +20,9 @@ T33A BLE 리모컨 키 리매퍼 완성 — EVIOCGRAB 커널 데몬 + Termux:Boo
 ## ⏩ Next Actions
 - [ ] Termux:Boot 부팅 시 자동 시작 안정화 (Samsung 배터리 최적화 이슈) <!-- id: 10 -->
 - [ ] 리매핑 테이블 커스터마이즈 기능 (config 파일 방식) <!-- id: 11 -->
+- [ ] zig 크로스 컴파일 빌드 스크립트 정리 (Termux 불필요) <!-- id: 12 -->
 
 ## 📝 Recent Activity
+- **2026-03-29**: uinput 디바이스 분류 수정 (GAMEPAD→KEYBOARD|TOUCH|EXTERNAL). IME 복원 (MoAKey→Honeyboard). zig cc 크로스 컴파일 도입. 말해보카 앱에서 3개 키 정상 동작 확인.
 - **2026-03-28**: T33A 리매퍼 전체 구현 완료. EVIOCGRAB C 데몬, Termux:Boot/Widget 스크립트, GitHub 레포 (ne0cean/t33a-remapper) 생성.
 - **2026-03-28**: Key Mapper IME 키보드 먹통 문제 해결 (Samsung Honeyboard로 복구 + IME 비활성화).
