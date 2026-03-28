@@ -5,6 +5,14 @@
 
 ---
 
+## [2026-03-28] (Mac / Claude Code) - [세션 초기화]
+
+**완료**: vibe-toolkit v3 초기화, `.agent/` `.context/` `tasks/` `lessons/` 구조 생성, CLAUDE.md 진입점 설정
+**이슈**: 없음
+**빌드**: N/A (인프라 초기화만 수행, 빌드 대상 없음)
+
+---
+
 ## [2026-03-14] [오후-2] (Mac / Claude Code) - [Auto-Compact 훅 시스템]
 
 **완료한 Tasks**:
