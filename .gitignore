@@ -1,0 +1,8 @@
+*.ab
+*.apk
+*.png
+*.o
+t33a_remap
+tasks/
+lessons/
+CLAUDE.md
