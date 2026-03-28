@@ -5,6 +5,25 @@
 
 ---
 
+## [2026-03-28] (Mac / Claude Code) - [T33A BLE Remote Key Remapper]
+
+**완료**:
+- T33A 리모컨 evdev 분석 (KEY_POWER/KEY_HOMEPAGE/KEY_ENTER 식별)
+- EVIOCGRAB + uinput C 데몬 작성 (커널 레벨 키 리매핑)
+- 데몬 v2: fork/setsid 데몬화 + BLE 자동 재연결 + start/stop/status CLI
+- Termux:Boot 자동 시작 + Termux:Widget 1탭 시작 스크립트
+- Key Mapper IME 키보드 먹통 해결 (Samsung Honeyboard 복구 + IME 비활성화)
+- Termux WRITE_SECURE_SETTINGS 권한 부여 (무선 디버깅 자가 활성화)
+- GitHub 레포 생성 (ne0cean/t33a-remapper)
+
+**이슈**:
+- Samsung 배터리 최적화가 Termux:Boot 부팅 시 실행을 차단 — deviceidle whitelist + RUN_IN_BACKGROUND로 대응했으나 불안정
+- Termux:Widget 1탭 방식이 확실한 백업
+
+**빌드**: ✅ (Termux clang arm64 빌드, 폰에서 정상 작동 확인)
+
+---
+
 ## [2026-03-28] (Mac / Claude Code) - [세션 초기화]
 
 **완료**: vibe-toolkit v3 초기화, `.agent/` `.context/` `tasks/` `lessons/` 구조 생성, CLAUDE.md 진입점 설정
