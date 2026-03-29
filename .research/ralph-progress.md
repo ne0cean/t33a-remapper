@@ -1,0 +1,1 @@
+- 반복 1: EV_ABS/EV_MSC 제거(GAMEPAD 분류 수정), MSC_SCAN 필터링(KEY_H scan code 수정) — 소스 수정+커밋 완료. /sdcard/Download에 소스+빌드스크립트 배포. Termux 수동 컴파일 필요(RunCommandService 권한 부재).

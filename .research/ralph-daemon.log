@@ -1,0 +1,14 @@
+[2026-03-28T21:41:27.895Z] [RALPH] 시작 — PID: 7827
+[2026-03-28T21:41:27.895Z] [RALPH] 시작 — PID: 7827
+[2026-03-28T21:41:27.901Z] [RALPH] 태스크: T33A BLE 리모컨의 3개 키(KEY_POWER→KEY_H, KEY_HOMEPAGE→KEY_1, KEY_ENTER→KEY_0)가 말해보카 앱(kr.epopsoft.word)에서 정상 동작하도록 EVIOCGRAB+uinput C 데몬을 수정하고 폰에 배포하여 검증. Termux clang으로 빌드 필요(adb shell에서 직접 Termux 바이너리 접근 불가, /sdcard/Download 경유). 현재 원본 코드(git 50958bc)는 KEY_H scan code 문제로 앱에서 인식 안 됨. uinput 디바이스가 GAMEPAD으로 분류되지 않도록 주의. show_ime_with_hard_keyboard 등 IME 설정 절대 건드리지 말 것.
+[2026-03-28T21:41:27.901Z] [RALPH] 태스크: T33A BLE 리모컨의 3개 키(KEY_POWER→KEY_H, KEY_HOMEPAGE→KEY_1, KEY_ENTER→KEY_0)가 말해보카 앱(kr.epopsoft.word)에서 정상 동작하도록 EVIOCGRAB+uinput C 데몬을 수정하고 폰에 배포하여 검증. Termux clang으로 빌드 필요(adb shell에서 직접 Termux 바이너리 접근 불가, /sdcard/Download 경유). 현재 원본 코드(git 50958bc)는 KEY_H scan code 문제로 앱에서 인식 안 됨. uinput 디바이스가 GAMEPAD으로 분류되지 않도록 주의. show_ime_with_hard_keyboard 등 IME 설정 절대 건드리지 말 것.
+[2026-03-28T21:41:27.901Z] [RALPH] 모델: sonnet | 최대: 20회 | 예산: $5
+[2026-03-28T21:41:27.901Z] [RALPH] 모델: sonnet | 최대: 20회 | 예산: $5
+[2026-03-28T21:41:27.946Z] [BRANCH] Ralph 브랜치 생성: ralph/2026-03-28-T33A-BLE-리모컨의-3개-키KEYPOWERKEYH (원본: main)
+[2026-03-28T21:41:27.946Z] [BRANCH] Ralph 브랜치 생성: ralph/2026-03-28-T33A-BLE-리모컨의-3개-키KEYPOWERKEYH (원본: main)
+[2026-03-28T21:41:27.948Z] [RALPH] 반복 1/20 — Pre-check 실행
+[2026-03-28T21:41:27.948Z] [RALPH] 반복 1/20 — Pre-check 실행
+[2026-03-28T21:41:27.963Z] [RALPH] 반복 1 시작 (HEAD: b776ef1)
+[2026-03-28T21:41:27.963Z] [RALPH] 반복 1 시작 (HEAD: b776ef1)
+[2026-03-28T21:44:11.242Z] [RALPH] SIGTERM — 상태 저장 후 종료
+[2026-03-28T21:44:11.242Z] [RALPH] SIGTERM — 상태 저장 후 종료
