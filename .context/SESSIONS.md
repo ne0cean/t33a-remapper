@@ -5,6 +5,27 @@
 
 ---
 
+## [2026-04-01] (Win / Claude Code) - [Supervisor + Watchdog + 상태 로깅]
+
+**완료**:
+- Supervisor 패턴 도입: daemon → supervisor(부모) → worker(자식) 구조, worker 크래시 시 자동 재시작
+- Signal hardening: SIGHUP/SIGPIPE 무시, write() 에러 처리
+- 상태 로깅: t33a.status (machine-readable) + t33a.log (human-readable) 파일 기록
+- 반응 속도 개선: device scan sleep 2s→0.5s, reconnect sleep 1s→0.2s, restart delay 3s→1s
+- show_ime_with_hard_keyboard=1 설정으로 소프트 키보드 복구
+- termux-notification 권한 활성화 (POST_NOTIFICATIONS grant)
+- watchdog 스크립트 작성 (ADB shell용 + Termux용 + boot 통합)
+
+**이슈**:
+- Termux에서 watchdog 상주 프로세스가 유지 안 됨 (nohup & 방식 불안정)
+- ADB shell의 nohup 프로세스도 세션 종료 시 같이 죽음
+- termux-notification 알림 권한이 꺼져있어 수동 활성화 필요했음
+- T33A 하드웨어 키보드 인식으로 소프트 키보드 숨김 발생
+
+**빌드**: ✅ (Termux clang arm64 빌드, 폰에서 정상 작동 확인)
+
+---
+
 ## [2026-03-29] (Mac / Claude Code) - [uinput 디바이스 분류 수정 + IME 복원]
 
 **완료**:

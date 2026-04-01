@@ -5,15 +5,45 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <errno.h>
+#include <time.h>
+#include <sys/wait.h>
 #include <linux/input.h>
 #include <linux/uinput.h>
 
 #define DEVICE_NAME "T33A"
 #define PID_FILE    "/data/local/tmp/t33a.pid"
+#define STATUS_FILE "/data/local/tmp/t33a.status"
+#define LOG_FILE    "/sdcard/Download/t33a.log"
+#define RESTART_DELAY 1
+#define LOG_MAX_LINES 200
 
 static volatile int running = 1;
+static volatile pid_t child_pid = 0;
 
 static void cleanup(int sig) { (void)sig; running = 0; }
+
+static void supervisor_cleanup(int sig) {
+    running = 0;
+    if (child_pid > 0) kill(child_pid, SIGTERM);
+}
+
+/* Write machine-readable status file for watchdog/notification */
+static void write_status(const char *state) {
+    FILE *f = fopen(STATUS_FILE, "w");
+    if (f) { fprintf(f, "%s\n", state); fclose(f); }
+}
+
+/* Append human-readable log entry */
+static void log_event(const char *msg) {
+    FILE *f = fopen(LOG_FILE, "a");
+    if (!f) return;
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d %s\n",
+            t->tm_year+1900, t->tm_mon+1, t->tm_mday,
+            t->tm_hour, t->tm_min, t->tm_sec, msg);
+    fclose(f);
+}
 
 static int remap_key(int code) {
     switch (code) {
@@ -99,6 +129,82 @@ static void daemonize(void) {
     if (fd >= 0) { dup2(fd, 0); dup2(fd, 1); dup2(fd, 2); close(fd); }
 }
 
+/* Worker: the actual remap loop. Runs as child of supervisor. */
+static int run_worker(void) {
+    signal(SIGINT,  cleanup);
+    signal(SIGTERM, cleanup);
+    signal(SIGHUP,  SIG_IGN);
+    signal(SIGPIPE, SIG_IGN);
+
+    write_status("waiting");
+    log_event("worker started");
+
+    while (running) {
+        int infd = find_device();
+        if (infd < 0) { usleep(500000); continue; }
+
+        if (ioctl(infd, EVIOCGRAB, 1) < 0) { close(infd); usleep(500000); continue; }
+
+        int uifd = create_uinput();
+        if (uifd < 0) { ioctl(infd, EVIOCGRAB, 0); close(infd); usleep(500000); continue; }
+
+        write_status("active");
+        log_event("BLE connected — remapping active");
+
+        /* remap loop */
+        struct input_event ev;
+        while (running && read(infd, &ev, sizeof(ev)) == sizeof(ev)) {
+            if (ev.type == EV_KEY)
+                ev.code = remap_key(ev.code);
+            if (write(uifd, &ev, sizeof(ev)) < 0) break;
+        }
+
+        /* device disconnected — cleanup and retry */
+        ioctl(uifd, UI_DEV_DESTROY);
+        close(uifd);
+        ioctl(infd, EVIOCGRAB, 0);
+        close(infd);
+
+        write_status("waiting");
+        log_event("BLE disconnected — waiting for reconnect");
+        usleep(200000);
+    }
+
+    write_status("stopped");
+    log_event("worker stopped");
+    return 0;
+}
+
+/* Supervisor: forks worker, restarts on unexpected death. */
+static void run_supervisor(void) {
+    signal(SIGINT,  supervisor_cleanup);
+    signal(SIGTERM, supervisor_cleanup);
+    signal(SIGHUP,  SIG_IGN);
+    signal(SIGPIPE, SIG_IGN);
+
+    while (running) {
+        child_pid = fork();
+        if (child_pid < 0) { sleep(RESTART_DELAY); continue; }
+
+        if (child_pid == 0) {
+            /* child = worker */
+            _exit(run_worker());
+        }
+
+        /* parent = supervisor: wait for worker */
+        int status;
+        waitpid(child_pid, &status, 0);
+        child_pid = 0;
+
+        if (!running) break;
+
+        /* worker died unexpectedly — restart after delay */
+        write_status("restarting");
+        log_event("worker died — restarting in 3s");
+        sleep(RESTART_DELAY);
+    }
+}
+
 int main(int argc, char **argv) {
     /* stop command */
     if (argc > 1 && strcmp(argv[1], "stop") == 0) {
@@ -124,41 +230,17 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    /* foreground mode */
-    int fg = (argc > 1 && strcmp(argv[1], "fg") == 0);
+    /* foreground mode — run worker directly (no supervisor) */
+    if (argc > 1 && strcmp(argv[1], "fg") == 0)
+        return run_worker();
 
-    signal(SIGINT,  cleanup);
-    signal(SIGTERM, cleanup);
-
-    if (!fg) daemonize();
+    /* daemon mode: daemonize → supervisor → worker */
+    daemonize();
     write_pid();
-
-    /* main loop: reconnect when T33A appears/disappears */
-    while (running) {
-        int infd = find_device();
-        if (infd < 0) { sleep(2); continue; }
-
-        if (ioctl(infd, EVIOCGRAB, 1) < 0) { close(infd); sleep(2); continue; }
-
-        int uifd = create_uinput();
-        if (uifd < 0) { ioctl(infd, EVIOCGRAB, 0); close(infd); sleep(2); continue; }
-
-        /* remap loop */
-        struct input_event ev;
-        while (running && read(infd, &ev, sizeof(ev)) == sizeof(ev)) {
-            if (ev.type == EV_KEY)
-                ev.code = remap_key(ev.code);
-            write(uifd, &ev, sizeof(ev));
-        }
-
-        /* device disconnected — cleanup and retry */
-        ioctl(uifd, UI_DEV_DESTROY);
-        close(uifd);
-        ioctl(infd, EVIOCGRAB, 0);
-        close(infd);
-        sleep(1);
-    }
-
+    log_event("daemon started (supervisor mode)");
+    run_supervisor();
+    write_status("stopped");
+    log_event("daemon stopped");
     remove_pid();
     return 0;
 }
