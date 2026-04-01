@@ -15,10 +15,19 @@
 #define STATUS_FILE "/data/local/tmp/t33a.status"
 #define LOG_FILE    "/sdcard/Download/t33a.log"
 #define RESTART_DELAY 1
+#define CONFIG_FILE "/data/local/tmp/t33a.conf"
 #define LOG_MAX_LINES 200
 
 static volatile int running = 1;
 static volatile pid_t child_pid = 0;
+
+typedef struct {
+    int from;
+    int to;
+} mapping_t;
+
+static mapping_t mappings[64];
+static int mapping_count = 0;
 
 static void cleanup(int sig) { (void)sig; running = 0; }
 
@@ -45,13 +54,39 @@ static void log_event(const char *msg) {
     fclose(f);
 }
 
-static int remap_key(int code) {
-    switch (code) {
-        case KEY_HOMEPAGE: return KEY_1;
-        case KEY_ENTER:    return KEY_0;
-        case KEY_POWER:    return KEY_H;
-        default:           return code;
+static void load_config(void) {
+    mapping_count = 0;
+    FILE *f = fopen(CONFIG_FILE, "r");
+    if (!f) {
+        /* Default fallback mappings */
+        mappings[mapping_count++] = (mapping_t){KEY_HOMEPAGE, KEY_1};
+        mappings[mapping_count++] = (mapping_t){KEY_ENTER,    KEY_0};
+        mappings[mapping_count++] = (mapping_t){KEY_POWER,    KEY_H};
+        log_event("config not found — using defaults");
+        return;
     }
+
+    char line[128];
+    while (fgets(line, sizeof(line), f) && mapping_count < 64) {
+        if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') continue;
+        int from, to;
+        if (sscanf(line, "%d %d", &from, &to) == 2) {
+            mappings[mapping_count].from = from;
+            mappings[mapping_count].to = to;
+            mapping_count++;
+        }
+    }
+    fclose(f);
+    char msg[64];
+    snprintf(msg, sizeof(msg), "loaded %d mappings from config", mapping_count);
+    log_event(msg);
+}
+
+static int remap_key(int code) {
+    for (int i = 0; i < mapping_count; i++) {
+        if (code == mappings[i].from) return mappings[i].to;
+    }
+    return code;
 }
 
 static int find_device(void) {
@@ -137,6 +172,7 @@ static int run_worker(void) {
     signal(SIGPIPE, SIG_IGN);
 
     write_status("waiting");
+    load_config();
     log_event("worker started");
 
     while (running) {

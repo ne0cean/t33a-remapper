@@ -5,6 +5,21 @@
 
 ---
 
+## [2026-04-01] (Mac / Claude Code) - [zig 크로스 컴파일 + 원클릭 배포]
+
+**완료**:
+- zig 0.14.0 Mac 직접 설치 (brew 권한 이슈 우회, ~/tools/)
+- `zig cc -target aarch64-linux-musl -static` 크로스 컴파일 성공 → Termux 빌드 불필요
+- `t33a.sh deploy` 커맨드 추가 (빌드→adb push→데몬 재시작 원클릭)
+- 폰 Termux:Widget 스크립트 현재 구조에 맞게 업데이트 (su 제거)
+- T33A_Deploy.app (Mac 바탕화면 AppleScript) 생성
+- 데몬 정상 확인 (PID 19551)
+
+**이슈**: brew 권한 문제 (sudo 불가 환경), Termux 내부 .shortcuts 디렉토리 ADB 직접 쓰기 불가
+**빌드**: ✅ (aarch64 ELF static binary, 2.9MB)
+
+---
+
 ## [2026-04-01] (Win / Claude Code) - [Supervisor + Watchdog + 상태 로깅]
 
 **완료**:
