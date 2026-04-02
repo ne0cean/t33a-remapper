@@ -5,6 +5,23 @@
 
 ---
 
+## [2026-04-02] (Windows / Claude Code) - [더블클릭 기능 + 위젯 버그픽스 + 성능 최적화]
+
+**완료**:
+- Windows용 zig 0.14.0 크로스 빌드 환경 구축 (`~/tools/zig-windows-x86_64-0.14.0/`)
+- KEY_1(홈버튼) 단일 누름 → 더블클릭 기능 구현 (`dbl` config 플래그, 8ms 간격)
+- 위젯/부팅 스크립트 `adb: more than one device/emulator` 오류 수정 (`-s localhost:$PORT`)
+- 빌드 최적화 `-O2`, SCHED_FIFO 시도 (root 없어 미적용)
+- 데몬 죽어있던 것 발견 → 재시작 및 watchdog 재구동
+
+**이슈**:
+- SCHED_FIFO 미적용 — `adb shell`이 shell 유저, `adb root` production 제한, Termux su 미설치
+- BLE 하드웨어 지연(10~50ms)이 병목 — 소프트웨어 최적화 한계
+
+**빌드**: ✅ (zig cc aarch64-linux-musl -O2)
+
+---
+
 ## [2026-04-01] (Mac / Claude Code) - [zig 크로스 컴파일 + 원클릭 배포]
 
 **완료**:
