@@ -24,6 +24,7 @@ static volatile pid_t child_pid = 0;
 typedef struct {
     int from;
     int to;
+    int double_click;  /* 1 = emit key twice on single press */
 } mapping_t;
 
 static mapping_t mappings[64];
@@ -59,9 +60,9 @@ static void load_config(void) {
     FILE *f = fopen(CONFIG_FILE, "r");
     if (!f) {
         /* Default fallback mappings */
-        mappings[mapping_count++] = (mapping_t){KEY_HOMEPAGE, KEY_1};
-        mappings[mapping_count++] = (mapping_t){KEY_ENTER,    KEY_0};
-        mappings[mapping_count++] = (mapping_t){KEY_POWER,    KEY_H};
+        mappings[mapping_count++] = (mapping_t){KEY_HOMEPAGE, KEY_1, 1};
+        mappings[mapping_count++] = (mapping_t){KEY_ENTER,    KEY_0, 0};
+        mappings[mapping_count++] = (mapping_t){KEY_POWER,    KEY_H, 0};
         log_event("config not found — using defaults");
         return;
     }
@@ -73,6 +74,7 @@ static void load_config(void) {
         if (sscanf(line, "%d %d", &from, &to) == 2) {
             mappings[mapping_count].from = from;
             mappings[mapping_count].to = to;
+            mappings[mapping_count].double_click = (strstr(line, "dbl") != NULL) ? 1 : 0;
             mapping_count++;
         }
     }
@@ -87,6 +89,36 @@ static int remap_key(int code) {
         if (code == mappings[i].from) return mappings[i].to;
     }
     return code;
+}
+
+static int is_double_click(int orig_code) {
+    for (int i = 0; i < mapping_count; i++) {
+        if (orig_code == mappings[i].from) return mappings[i].double_click;
+    }
+    return 0;
+}
+
+static void emit_event(int fd, __u16 type, __u16 code, __s32 value) {
+    struct input_event ev = {0};
+    ev.type = type;
+    ev.code = code;
+    ev.value = value;
+    write(fd, &ev, sizeof(ev));
+}
+
+static void emit_double_click(int uifd, int key_code) {
+    /* First click: press + release */
+    emit_event(uifd, EV_KEY, key_code, 1);
+    emit_event(uifd, EV_SYN, SYN_REPORT, 0);
+    emit_event(uifd, EV_KEY, key_code, 0);
+    emit_event(uifd, EV_SYN, SYN_REPORT, 0);
+    /* Short gap between clicks */
+    usleep(30000);  /* 30ms */
+    /* Second click: press + release */
+    emit_event(uifd, EV_KEY, key_code, 1);
+    emit_event(uifd, EV_SYN, SYN_REPORT, 0);
+    emit_event(uifd, EV_KEY, key_code, 0);
+    emit_event(uifd, EV_SYN, SYN_REPORT, 0);
 }
 
 static int find_device(void) {
@@ -190,8 +222,18 @@ static int run_worker(void) {
         /* remap loop */
         struct input_event ev;
         while (running && read(infd, &ev, sizeof(ev)) == sizeof(ev)) {
-            if (ev.type == EV_KEY)
-                ev.code = remap_key(ev.code);
+            if (ev.type == EV_KEY) {
+                int orig_code = ev.code;
+                ev.code = remap_key(orig_code);
+                /* Double-click: on key down, emit two full clicks and suppress further events */
+                if (is_double_click(orig_code) && ev.value == 1) {
+                    emit_double_click(uifd, ev.code);
+                    continue;  /* skip original down event */
+                }
+                if (is_double_click(orig_code) && ev.value == 0) {
+                    continue;  /* suppress key up — already sent in double_click */
+                }
+            }
             if (write(uifd, &ev, sizeof(ev)) < 0) break;
         }
 
