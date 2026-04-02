@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <time.h>
 #include <sys/wait.h>
+#include <sched.h>
 #include <linux/input.h>
 #include <linux/uinput.h>
 
@@ -113,7 +114,7 @@ static void emit_double_click(int uifd, int key_code) {
     emit_event(uifd, EV_KEY, key_code, 0);
     emit_event(uifd, EV_SYN, SYN_REPORT, 0);
     /* Short gap between clicks */
-    usleep(30000);  /* 30ms */
+    usleep(8000);   /* 8ms — minimum gap for Android double-tap recognition */
     /* Second click: press + release */
     emit_event(uifd, EV_KEY, key_code, 1);
     emit_event(uifd, EV_SYN, SYN_REPORT, 0);
@@ -202,6 +203,13 @@ static int run_worker(void) {
     signal(SIGTERM, cleanup);
     signal(SIGHUP,  SIG_IGN);
     signal(SIGPIPE, SIG_IGN);
+
+    /* Boost to real-time priority for minimal input latency */
+    struct sched_param sp = { .sched_priority = 1 };
+    if (sched_setscheduler(0, SCHED_FIFO, &sp) < 0)
+        log_event("warn: SCHED_FIFO failed (not root?) — continuing with normal priority");
+    else
+        log_event("SCHED_FIFO priority set");
 
     write_status("waiting");
     load_config();
