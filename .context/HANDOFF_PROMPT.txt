@@ -1,0 +1,28 @@
+# 컨텍스트 핸드오프 — 2026-04-02 01:58
+
+이전 세션에서 이어받은 작업입니다. 아래 맥락을 읽고 즉시 재개하세요.
+
+## 최근 커밋 (last 3)
+fcdfa4a sync: model handoff 2026-04-02 01:58 — KEY_1 double-click 기능 추가
+c070570 [feat]: Mac zig 크로스 컴파일 + 원클릭 배포 파이프라인
+d2cbe1b [feat]: supervisor 패턴 + 상태 로깅 + watchdog 스크립트
+
+## 완료된 작업
+1. KEY_1(홈버튼) 더블클릭 기능 구현 — src/t33a_remap.c에 double_click 플래그 추가, config에 "dbl" 옵션 파싱
+2. Windows용 zig 0.14.0 설치 (C:\Users\SKTelecom\tools\zig-windows-x86_64-0.14.0\)
+3. 크로스 빌드 (aarch64-linux-musl) → 폰 배포 완료 (PID 26845 구동 중)
+4. 데몬 죽어있던 것 발견 → 재시작 완료
+
+## 남은 작업 (유저가 요청한 것)
+- **깃헙 호출 경로 수정**: 유저가 /clear 전에 지시한 건. 프로젝트 내 GitHub URL은 `.agent/skills/upgrade/SKILL.md`에 `raw.githubusercontent.com/ne0cean/vibe-toolkit/main/upgrade.sh` 존재. 유저에게 구체적으로 어떤 경로가 문제인지 재확인 필요.
+- **더블클릭 실기기 테스트**: BLE 리모컨 연결 후 KEY_1 더블클릭 동작 확인 필요
+
+## ADB 경로 (Windows)
+/c/Users/SKTelecom/AppData/Local/platform-tools/platform-tools/adb.exe
+MSYS_NO_PATHCONV=1 필수 (Git Bash 경로 변환 방지)
+
+## 지시
+1. 위 맥락을 정독하세요.
+2. git status + git log --oneline -5 로 현재 상태를 확인하세요.
+3. 유저에게 "깃헙 호출 경로" 건이 무엇이었는지 확인하고, 남은 작업을 이어가세요.
+4. 브리핑 없이 바로 실행하세요.

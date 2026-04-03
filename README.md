@@ -70,9 +70,21 @@ adb shell dumpsys deviceidle whitelist +com.termux
 adb shell dumpsys deviceidle whitelist +com.termux.boot
 ```
 
+## 상시 실행 및 안정화 (Always-On)
+ 
+데몬은 리모컨 연결을 상시 감시하며, 비정상 종료 시 슈퍼바이저가 자동 재시작합니다. 더 안정적인 구동을 위해 Samsung 갤럭시 등에서 아래 설정이 필요합니다:
+
+**1. 배터리 최적화 완전 해제** (필수)
+- `설정 > 애플리케이션 > Termux > 배터리 > 제한 없음`
+- `설정 > 애플리케이션 > Termux:Boot > 배터리 > 제한 없음`
+
+**2. 백그라운드 상시 수행 보장**
+- Termux 알림창에서 `Acquire wakelock` 버튼을 클릭하여 잠자기 모드 방지.
+- `t33a_boot.sh`에 포함된 Watchdog이 주기적으로 상태를 체크하고 알림바를 업데이트합니다.
+
 ## 요구사항
 
-- Android (Samsung Galaxy 테스트됨)
+- Android 11+ (Samsung Galaxy 테스트됨)
 - T33A BLE 리모컨 (vendor: 05AC, product: 022C)
 - Termux + Termux:Boot + Termux:Widget
 - ADB 디버깅 활성화

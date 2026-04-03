@@ -10,6 +10,7 @@
 #include <sched.h>
 #include <linux/input.h>
 #include <linux/uinput.h>
+#include <sys/prctl.h>
 
 #define DEVICE_NAME "T33A"
 #define PID_FILE    "/data/local/tmp/t33a.pid"
@@ -114,7 +115,7 @@ static void emit_double_click(int uifd, int key_code) {
     emit_event(uifd, EV_KEY, key_code, 0);
     emit_event(uifd, EV_SYN, SYN_REPORT, 0);
     /* Short gap between clicks */
-    usleep(8000);   /* 8ms — minimum gap for Android double-tap recognition */
+    usleep(0);   /* 0ms test — check if Android recognizes rapid double events */
     /* Second click: press + release */
     emit_event(uifd, EV_KEY, key_code, 1);
     emit_event(uifd, EV_SYN, SYN_REPORT, 0);
@@ -203,6 +204,9 @@ static int run_worker(void) {
     signal(SIGTERM, cleanup);
     signal(SIGHUP,  SIG_IGN);
     signal(SIGPIPE, SIG_IGN);
+    
+    /* Ensure worker dies if supervisor (parent) dies */
+    prctl(PR_SET_PDEATHSIG, SIGTERM);
 
     /* Boost to real-time priority for minimal input latency */
     struct sched_param sp = { .sched_priority = 1 };

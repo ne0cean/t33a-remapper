@@ -27,6 +27,7 @@ T33A BLE 리모컨 키 리매퍼 — Mac zig 크로스 컴파일 + adb 원클릭
 - [ ] SCHED_FIFO root 경로 확인 (Magisk su 위치 파악) <!-- id: 18 -->
 
 ## 📝 Recent Activity
+- **2026-04-03**: [Windows] `CLAUDE.md` 가이드 생성. 더블클릭 간격 0ms 테스트를 위해 `src/t33a_remap.c` 수정 및 Zig Windows 크로스 컴파일(aarch64) 성공. `build/t33a_remap` 생성 및 실기기 배포 완료 (PID 28849).
 - **2026-04-02**: Windows zig 크로스 빌드 환경 구축. KEY_1(홈버튼) 더블클릭 기능 구현 (dbl 플래그, 8ms 간격). 위젯 adb 다중 디바이스 오류 수정 (`-s localhost:$PORT`). SCHED_FIFO 시도 (-O2 빌드). 데몬 상시 구동 확인 및 재시작.
 - **2026-04-01**: Mac zig 크로스 컴파일 도입 (brew 우회, 직접 다운로드 ~/tools/). `t33a.sh deploy` 원클릭 빌드+배포+재시작. 폰 Termux:Widget `/sdcard/Download/t33a.sh` 현재 구조 맞게 업데이트 (su 제거, /data/local/tmp 경로). 데몬 정상 확인 (PID 19551).
 - **2026-03-29**: uinput 디바이스 분류 수정 (GAMEPAD→KEYBOARD|TOUCH|EXTERNAL). IME 복원 (MoAKey→Honeyboard). zig cc 크로스 컴파일 도입. 말해보카 앱에서 3개 키 정상 동작 확인.

@@ -20,6 +20,9 @@ sleep 2
 
 for i in $(seq 1 5); do
     if adb -s localhost:$PORT shell echo ok >> "$LOG" 2>&1; then
+        # Ensure clean start by stopping any existing daemon or supervisor
+        adb -s localhost:$PORT shell "$BIN stop" >> "$LOG" 2>&1
+        sleep 1
         adb -s localhost:$PORT shell "$BIN" >> "$LOG" 2>&1
         echo "$(date): remapper started" >> "$LOG"
         toast "T33A remapper started"

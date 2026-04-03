@@ -34,6 +34,9 @@ run_watchdog() {
         local pid=$(cat /data/local/tmp/t33a.pid 2>/dev/null)
         if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
             echo "$(date): watchdog: daemon dead — restarting" >> "$LOG"
+            # Ensure clean stop before restart
+            adb -s localhost:$PORT shell "$BIN stop" >> "$LOG" 2>&1
+            sleep 1
             adb -s localhost:$PORT shell "$BIN" >> "$LOG" 2>&1
             sleep 2
         fi
