@@ -21,12 +21,12 @@ T33A BLE 리모컨 키 리매퍼 — Mac zig 크로스 컴파일 + adb 원클릭
 - (없음)
 
 ## ⏩ Next Actions
-- [ ] 더블클릭 간격 0ms 테스트 (앱 인식 여부 확인) <!-- id: 17 -->
-- [ ] README.md 최신화 (zig 크로스 컴파일 + deploy 워크플로우 반영) <!-- id: 16 -->
-- [ ] Termux:Boot 부팅 자동 시작 안정화 (Samsung 배터리 최적화) <!-- id: 10 -->
-- [ ] SCHED_FIFO root 경로 확인 (Magisk su 위치 파악) <!-- id: 18 -->
+- [ ] ~/.shortcuts/T33A wrapper 최종 설치 확인 (Termux 1회: `cp /sdcard/Download/T33A_wrapper ~/.shortcuts/T33A`)
+- [ ] 재부팅 후 boot.sh → termux-wake-lock + relay 자동 시작 검증
+- [ ] README.md 최신화 (relay 구조, termux-wake-lock 반영)
 
 ## 📝 Recent Activity
+- **2026-04-05**: 데몬 안정화. relay 구조 도입 (watchdog 대체, 5초 헬스체크), termux-wake-lock으로 Samsung kill 방지, remove_pid() 레이스 컨디션 픽스, 위젯 fast path 구현 (~1초). Termux 홈 ADB 격리(Android 14+)로 ~/.shortcuts 직접 수정 불가.
 - **2026-04-03**: [Windows] `CLAUDE.md` 가이드 생성. 더블클릭 간격 0ms 테스트를 위해 `src/t33a_remap.c` 수정 및 Zig Windows 크로스 컴파일(aarch64) 성공. `build/t33a_remap` 생성 및 실기기 배포 완료 (PID 28849).
 - **2026-04-02**: Windows zig 크로스 빌드 환경 구축. KEY_1(홈버튼) 더블클릭 기능 구현 (dbl 플래그, 8ms 간격). 위젯 adb 다중 디바이스 오류 수정 (`-s localhost:$PORT`). SCHED_FIFO 시도 (-O2 빌드). 데몬 상시 구동 확인 및 재시작.
 - **2026-04-01**: Mac zig 크로스 컴파일 도입 (brew 우회, 직접 다운로드 ~/tools/). `t33a.sh deploy` 원클릭 빌드+배포+재시작. 폰 Termux:Widget `/sdcard/Download/t33a.sh` 현재 구조 맞게 업데이트 (su 제거, /data/local/tmp 경로). 데몬 정상 확인 (PID 19551).

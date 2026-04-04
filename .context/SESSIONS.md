@@ -216,3 +216,21 @@
  README.md                      | 9 ++++++++-
  2 files changed, 13 insertions(+), 5 deletions(-)
 ```
+
+## [2026-04-05] 데몬 안정화 — relay 구조 + termux-wake-lock
+
+**완료**:
+- `remove_pid()` 레이스 컨디션 수정 (구 데몬이 새 데몬 PID 파일 삭제하던 버그)
+- watchdog → relay 구조로 교체 (5초 헬스체크, cmd 파일로 위젯 명령 수신)
+- 위젯 fast path 구현: relay 살아있으면 cmd 파일 쓰기만으로 ~1초 재시작
+- termux-wake-lock 도입: Termux foreground service화 → Samsung 강제종료 방지
+- boot.sh Termux 상주 watchdog 추가 (ADB loopback으로 relay/데몬 복구)
+- Termux에서 바이너리 빌드 후 ADB로 배포
+
+**이슈**:
+- Android 14+ 데이터 격리: ADB에서 Termux 홈(/data/data/com.termux/) 쓰기 불가 → ~/.shortcuts/T33A 자동 업데이트 불가
+- Samsung이 setsid shell 프로세스도 주기적으로 SIGKILL (root 없이 방지 불가) → termux-wake-lock + Termux watchdog으로 복구 커버
+- Termux RUN_COMMAND broadcast 권한 없어 자동화 불가
+- 긴 디버깅 세션 중 pkill -9 반복으로 좀비 프로세스 누적 → EVIOCGRAB 충돌
+
+**빌드**: ✅ (Termux clang arm64, remove_pid 픽스 포함)

@@ -184,7 +184,16 @@ static void write_pid(void) {
     if (f) { fprintf(f, "%d\n", getpid()); fclose(f); }
 }
 
-static void remove_pid(void) { unlink(PID_FILE); }
+static void remove_pid(void) {
+    /* Only remove if PID file still contains our own PID.
+     * Prevents a dying daemon from deleting a freshly-started daemon's PID. */
+    FILE *f = fopen(PID_FILE, "r");
+    if (!f) return;
+    int pid = 0;
+    fscanf(f, "%d", &pid);
+    fclose(f);
+    if (pid == getpid()) unlink(PID_FILE);
+}
 
 static void daemonize(void) {
     pid_t pid = fork();
