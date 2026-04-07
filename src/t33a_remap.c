@@ -249,6 +249,11 @@ static int run_worker(void) {
         /* remap loop */
         struct input_event ev;
         while (running && read(infd, &ev, sizeof(ev)) == sizeof(ev)) {
+            if (ev.type == EV_MSC && ev.code == MSC_SCAN) {
+                /* Drop MSC_SCAN — stale scan codes (e.g. consumer power 0x000c0030)
+                 * confuse Android's InputReader into misidentifying remapped keys */
+                continue;
+            }
             if (ev.type == EV_KEY) {
                 int orig_code = ev.code;
                 ev.code = remap_key(orig_code);
