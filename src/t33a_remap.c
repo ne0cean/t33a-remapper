@@ -133,8 +133,8 @@ static mapping_t *find_tap(int orig_code) {
 }
 
 static void emit_tap(int tap_x, int tap_y) {
-    char cmd[128];
-    snprintf(cmd, sizeof(cmd), "input tap %d %d", tap_x, tap_y);
+    char cmd[64];
+    snprintf(cmd, sizeof(cmd), "input tap %d %d &", tap_x, tap_y);
     system(cmd);
 }
 

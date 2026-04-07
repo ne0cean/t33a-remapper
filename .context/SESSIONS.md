@@ -5,17 +5,19 @@
 
 ---
 
-## [2026-04-07] (Windows / Claude Code) - [KEY_H 미동작 버그 수정]
+## [2026-04-07] (Mac / Claude Code) - [tap 매핑으로 H키 기능 복원]
 
 **완료**:
-- KEY_POWER→KEY_H 매핑이 동작하지 않는 원인 진단: 커널 전원 관리 핸들러가 EVIOCGRAB을 우회해 화면을 끄고 KEY_H를 삼킴
-- `mapping_t`에 `wakeup` 필드 추가, `is_wakeup()` 함수 구현
-- remap loop에서 wakeup 플래그 시 KEY_WAKEUP 선 방출 + 80ms 대기 후 실제 키 전송
-- `t33a.conf`에 `116 35 wakeup` 적용
-- `create_uinput()`에 `KEY_WAKEUP` 등록 추가
+- MSC_SCAN 드롭 수정 — 파워키 scan code(0x000c0030)가 KEYCODE_UNKNOWN 오인 유발
+- KEY_H 앱 미반응 원인 확정: 말해보카 1.2.398(04-02 업데이트)이 KEYCODE_H 키보드 입력 무시
+- A-Z 전체 키코드 스캔 — 알파벳 키 전부 무반응 확인, SPACE만 enter 역할
+- `tap` 매핑 타입 도입: `116 tap 1050 1330` — T33A 파워키 → 화면 좌표 직접 탭
+- README.md 전면 최신화 (relay 구조, termux-wake-lock, t33a.conf, deploy 커맨드)
+- 위젯 → relay → 데몬 재시작 e2e 검증 완료
 
 **이슈**:
-- 실기기 테스트 미완 — adb push + 데몬 재시작 필요
+- 직접 터치 디바이스 쓰기(/dev/input/event6) 시도했으나 실패 — system("input tap") 방식 유지 (~300ms 지연)
+- tap 좌표는 앱 UI 변경 시 수동 업데이트 필요
 
 **빌드**: ✅ (zig cc aarch64-linux-musl)
 
