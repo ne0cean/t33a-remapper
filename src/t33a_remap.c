@@ -27,6 +27,9 @@ typedef struct {
     int to;
     int double_click;  /* 1 = emit key twice on single press */
     int wakeup;        /* 1 = emit KEY_WAKEUP first (for power-key source) */
+    int tap;           /* 1 = inject screen tap instead of key */
+    int tap_x;
+    int tap_y;
 } mapping_t;
 
 static mapping_t mappings[64];
@@ -72,12 +75,26 @@ static void load_config(void) {
     char line[128];
     while (fgets(line, sizeof(line), f) && mapping_count < 64) {
         if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') continue;
-        int from, to;
-        if (sscanf(line, "%d %d", &from, &to) == 2) {
-            mappings[mapping_count].from = from;
-            mappings[mapping_count].to = to;
+        int from, tap_x, tap_y;
+        /* tap mapping: "116 tap 1047 483" */
+        if (sscanf(line, "%d tap %d %d", &from, &tap_x, &tap_y) == 3) {
+            mappings[mapping_count].from        = from;
+            mappings[mapping_count].to          = 0;
+            mappings[mapping_count].double_click = 0;
+            mappings[mapping_count].wakeup      = 0;
+            mappings[mapping_count].tap         = 1;
+            mappings[mapping_count].tap_x       = tap_x;
+            mappings[mapping_count].tap_y       = tap_y;
+            mapping_count++;
+            continue;
+        }
+        int from2, to;
+        if (sscanf(line, "%d %d", &from2, &to) == 2) {
+            mappings[mapping_count].from         = from2;
+            mappings[mapping_count].to           = to;
             mappings[mapping_count].double_click = (strstr(line, "dbl")    != NULL) ? 1 : 0;
             mappings[mapping_count].wakeup       = (strstr(line, "wakeup") != NULL) ? 1 : 0;
+            mappings[mapping_count].tap          = 0;
             mapping_count++;
         }
     }
@@ -106,6 +123,19 @@ static int is_wakeup(int orig_code) {
         if (orig_code == mappings[i].from) return mappings[i].wakeup;
     }
     return 0;
+}
+
+static mapping_t *find_tap(int orig_code) {
+    for (int i = 0; i < mapping_count; i++) {
+        if (orig_code == mappings[i].from && mappings[i].tap) return &mappings[i];
+    }
+    return NULL;
+}
+
+static void emit_tap(int tap_x, int tap_y) {
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd), "input tap %d %d", tap_x, tap_y);
+    system(cmd);
 }
 
 static void emit_event(int fd, __u16 type, __u16 code, __s32 value) {
@@ -256,6 +286,12 @@ static int run_worker(void) {
             }
             if (ev.type == EV_KEY) {
                 int orig_code = ev.code;
+                /* Tap mapping: inject screen touch instead of key */
+                mapping_t *tap_map = find_tap(orig_code);
+                if (tap_map) {
+                    if (ev.value == 1) emit_tap(tap_map->tap_x, tap_map->tap_y);
+                    continue;  /* suppress key up too */
+                }
                 ev.code = remap_key(orig_code);
                 /* Wakeup: emit KEY_WAKEUP before key to counteract power-key screen-off */
                 if (is_wakeup(orig_code) && ev.value == 1) {
