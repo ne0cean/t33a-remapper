@@ -5,6 +5,22 @@
 
 ---
 
+## [2026-04-07] (Windows / Claude Code) - [KEY_H 미동작 버그 수정]
+
+**완료**:
+- KEY_POWER→KEY_H 매핑이 동작하지 않는 원인 진단: 커널 전원 관리 핸들러가 EVIOCGRAB을 우회해 화면을 끄고 KEY_H를 삼킴
+- `mapping_t`에 `wakeup` 필드 추가, `is_wakeup()` 함수 구현
+- remap loop에서 wakeup 플래그 시 KEY_WAKEUP 선 방출 + 80ms 대기 후 실제 키 전송
+- `t33a.conf`에 `116 35 wakeup` 적용
+- `create_uinput()`에 `KEY_WAKEUP` 등록 추가
+
+**이슈**:
+- 실기기 테스트 미완 — adb push + 데몬 재시작 필요
+
+**빌드**: ✅ (zig cc aarch64-linux-musl)
+
+---
+
 ## [2026-04-02] (Windows / Claude Code) - [더블클릭 기능 + 위젯 버그픽스 + 성능 최적화]
 
 **완료**:

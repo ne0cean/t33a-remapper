@@ -10,7 +10,6 @@
 #include <sched.h>
 #include <linux/input.h>
 #include <linux/uinput.h>
-#include <sys/prctl.h>
 
 #define DEVICE_NAME "T33A"
 #define PID_FILE    "/data/local/tmp/t33a.pid"
@@ -27,6 +26,7 @@ typedef struct {
     int from;
     int to;
     int double_click;  /* 1 = emit key twice on single press */
+    int wakeup;        /* 1 = emit KEY_WAKEUP first (for power-key source) */
 } mapping_t;
 
 static mapping_t mappings[64];
@@ -62,9 +62,9 @@ static void load_config(void) {
     FILE *f = fopen(CONFIG_FILE, "r");
     if (!f) {
         /* Default fallback mappings */
-        mappings[mapping_count++] = (mapping_t){KEY_HOMEPAGE, KEY_1, 1};
-        mappings[mapping_count++] = (mapping_t){KEY_ENTER,    KEY_0, 0};
-        mappings[mapping_count++] = (mapping_t){KEY_POWER,    KEY_H, 0};
+        mappings[mapping_count++] = (mapping_t){KEY_HOMEPAGE, KEY_1, 1, 0};
+        mappings[mapping_count++] = (mapping_t){KEY_ENTER,    KEY_0, 0, 0};
+        mappings[mapping_count++] = (mapping_t){KEY_POWER,    KEY_H, 0, 1};
         log_event("config not found — using defaults");
         return;
     }
@@ -76,7 +76,8 @@ static void load_config(void) {
         if (sscanf(line, "%d %d", &from, &to) == 2) {
             mappings[mapping_count].from = from;
             mappings[mapping_count].to = to;
-            mappings[mapping_count].double_click = (strstr(line, "dbl") != NULL) ? 1 : 0;
+            mappings[mapping_count].double_click = (strstr(line, "dbl")    != NULL) ? 1 : 0;
+            mappings[mapping_count].wakeup       = (strstr(line, "wakeup") != NULL) ? 1 : 0;
             mapping_count++;
         }
     }
@@ -100,6 +101,13 @@ static int is_double_click(int orig_code) {
     return 0;
 }
 
+static int is_wakeup(int orig_code) {
+    for (int i = 0; i < mapping_count; i++) {
+        if (orig_code == mappings[i].from) return mappings[i].wakeup;
+    }
+    return 0;
+}
+
 static void emit_event(int fd, __u16 type, __u16 code, __s32 value) {
     struct input_event ev = {0};
     ev.type = type;
@@ -115,7 +123,7 @@ static void emit_double_click(int uifd, int key_code) {
     emit_event(uifd, EV_KEY, key_code, 0);
     emit_event(uifd, EV_SYN, SYN_REPORT, 0);
     /* Short gap between clicks */
-    usleep(0);   /* 0ms test — check if Android recognizes rapid double events */
+    usleep(8000);   /* 8ms — safer gap for Android double-tap recognition */
     /* Second click: press + release */
     emit_event(uifd, EV_KEY, key_code, 1);
     emit_event(uifd, EV_SYN, SYN_REPORT, 0);
@@ -159,6 +167,7 @@ static int create_uinput(void) {
     ioctl(fd, UI_SET_KEYBIT, KEY_ENTER);
     ioctl(fd, UI_SET_KEYBIT, KEY_POWER);
     ioctl(fd, UI_SET_KEYBIT, KEY_HOMEPAGE);
+    ioctl(fd, UI_SET_KEYBIT, KEY_WAKEUP);
     ioctl(fd, UI_SET_KEYBIT, BTN_TOUCH);
 
     ioctl(fd, UI_SET_MSCBIT, MSC_SCAN);
@@ -213,9 +222,6 @@ static int run_worker(void) {
     signal(SIGTERM, cleanup);
     signal(SIGHUP,  SIG_IGN);
     signal(SIGPIPE, SIG_IGN);
-    
-    /* Ensure worker dies if supervisor (parent) dies */
-    prctl(PR_SET_PDEATHSIG, SIGTERM);
 
     /* Boost to real-time priority for minimal input latency */
     struct sched_param sp = { .sched_priority = 1 };
@@ -246,6 +252,14 @@ static int run_worker(void) {
             if (ev.type == EV_KEY) {
                 int orig_code = ev.code;
                 ev.code = remap_key(orig_code);
+                /* Wakeup: emit KEY_WAKEUP before key to counteract power-key screen-off */
+                if (is_wakeup(orig_code) && ev.value == 1) {
+                    emit_event(uifd, EV_KEY, KEY_WAKEUP, 1);
+                    emit_event(uifd, EV_SYN, SYN_REPORT, 0);
+                    emit_event(uifd, EV_KEY, KEY_WAKEUP, 0);
+                    emit_event(uifd, EV_SYN, SYN_REPORT, 0);
+                    usleep(80000);  /* 80ms — wait for screen-on before key dispatch */
+                }
                 /* Double-click: on key down, emit two full clicks and suppress further events */
                 if (is_double_click(orig_code) && ev.value == 1) {
                     emit_double_click(uifd, ev.code);
