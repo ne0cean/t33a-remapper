@@ -22,9 +22,13 @@
 - 위젯 리프레시 → T33A_NEW 새 항목 표시 → 탭 → **즉시 작동** (debug log + boot.log + relay log 모두 e2e 검증, 22:34/22:36 두번 연속 성공)
 - 결론: 기존 T33A 파일이 broken state였음. 이름 다른 새 wrapper로 우회 = 정답
 
-**옥의 티 (다음 세션)**:
-- t33a_start.sh의 fast path가 Termux→shell /proc 격리로 항상 실패 → 매 위젯 탭이 16~18초 slow path. ADB loopback으로 fast path 재작성 필요
-- 위젯 탭마다 relay 프로세스 +1 누적 (무해)
+**옥의 티도 끝냄**:
+- fast path 재설계: /proc 체크 대신 cmd 파일 소비 여부로 relay alive 판정 → 탭 → 1초 응답 달성
+- CMD 파일 위치 /data/local/tmp → /sdcard/Download (Termux u0_a533이 /data/local/tmp 쓰기 차단당함, /sdcard는 양쪽 R/W 가능)
+- relay polling 5초 → 1초 (cmd 체크만). watchdog은 여전히 5초 간격 (CPU 부담 없게)
+- relay restart_daemon: SIGTERM + 1초 → SIGKILL + 1초 후 재기동 (중복 누적 방지)
+- boot.sh/start.sh slow path: 기존 relay PID 파일 읽어 kill 후 새 relay 띄움
+- 최종 상태: relay 1개 + supervisor+worker 1쌍만 유지
 
 **교훈**:
 - Windows에서 push하는 쉘 스크립트는 반드시 `.gitattributes`로 EOL 고정. autocrlf 영향 받으면 Android에서 즉사

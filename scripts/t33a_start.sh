@@ -1,52 +1,66 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # T33A 위젯 — 원터치 재시작
-# Fast path:  relay 살아있음 → cmd 파일 쓰기 → ~1초
-# Slow path:  relay 죽음    → ADB loopback → relay + 데몬 재시작
+# Fast path: cmd 파일 쓰고 1초 대기 → relay가 처리했으면 끝 (~1초)
+# Slow path: relay 죽음 → ADB loopback → 기존 relay kill → 새 relay 띄움 (~3초)
 
 RELAY_PID_FILE=/data/local/tmp/t33a_relay.pid
 RELAY=/data/local/tmp/t33a_relay.sh
-CMD=/data/local/tmp/t33a.cmd
+CMD=/sdcard/Download/t33a.cmd  # /sdcard로: Termux(u0_a533)와 shell 둘 다 write 가능
 LOG=/sdcard/Download/t33a_boot.log
-PORT=5555
 
 echo "" >> "$LOG"
 echo "$(date): === widget tap ===" >> "$LOG"
 
-# ── Fast path: relay가 살아있으면 cmd 파일로 재시작 요청 ──
-# Termux(u0_a533)에서 shell 유저 프로세스는 kill -0 불가 → /proc/PID 존재로 확인
-RPID=$(cat "$RELAY_PID_FILE" 2>/dev/null)
-if [ -n "$RPID" ] && [ -d "/proc/$RPID" ]; then
-    echo restart > "$CMD"
-    echo "$(date): fast path — relay PID $RPID" >> "$LOG"
+# ── Fast path: cmd 쓰고 relay 처리 여부로 alive 판정 ──
+# Termux(u0_a533)에서 shell 유저 /proc 접근 불가 → cmd 파일 소비 여부로 우회
+echo restart > "$CMD"
+sleep 1.5
+if [ ! -f "$CMD" ]; then
+    # relay가 cmd를 처리하고 삭제함 = 살아있음
+    echo "$(date): fast path — cmd consumed" >> "$LOG"
     termux-toast "T33A 재시작 중"
     exit 0
 fi
 
-# ── Slow path: relay 죽음, ADB로 재시작 ───────────────────
+# ── Slow path: cmd 안 사라짐 = relay 죽음, ADB로 재기동 ──
+rm -f "$CMD"
 echo "$(date): slow path — relay dead" >> "$LOG"
-termux-toast "T33A: 초기화 중... (15초)"
+termux-toast "T33A: 초기화 중..."
 
 /system/bin/settings put global adb_wifi_enabled 1 2>/dev/null
-sleep 3
 
-adb kill-server >> "$LOG" 2>&1
-sleep 1
-adb start-server >> "$LOG" 2>&1
-sleep 2
+# ADB 서버는 이미 떠있을 가능성 높음 — kill/start 생략, 바로 connect 시도
+PORT=$(getprop service.adb.tls.port 2>/dev/null)
+[ -z "$PORT" ] || [ "$PORT" = "0" ] && PORT=$(getprop service.adb.tcp.port 2>/dev/null)
+[ -z "$PORT" ] || [ "$PORT" = "0" ] && PORT=5555
 
 connected=false
-for i in $(seq 1 15); do
-    PORT=$(getprop service.adb.tls.port 2>/dev/null)
-    [ -z "$PORT" ] || [ "$PORT" = "0" ] && PORT=$(getprop service.adb.tcp.port 2>/dev/null)
-    [ -z "$PORT" ] || [ "$PORT" = "0" ] && PORT=5555
+for i in 1 2 3 4 5; do
     result=$(adb connect localhost:$PORT 2>&1)
     echo "$(date): connect #$i (port=$PORT): $result" >> "$LOG"
     if echo "$result" | grep -q "connected"; then
         connected=true
         break
     fi
-    sleep 2
+    sleep 1
 done
+
+# 첫 연결 실패 시에만 ADB 서버 재시작
+if ! $connected; then
+    adb kill-server >> "$LOG" 2>&1
+    sleep 1
+    adb start-server >> "$LOG" 2>&1
+    sleep 1
+    for i in 1 2 3; do
+        result=$(adb connect localhost:$PORT 2>&1)
+        echo "$(date): retry #$i: $result" >> "$LOG"
+        if echo "$result" | grep -q "connected"; then
+            connected=true
+            break
+        fi
+        sleep 1
+    done
+fi
 
 if ! $connected; then
     termux-toast "T33A: ADB 연결 실패"
@@ -54,11 +68,11 @@ if ! $connected; then
     exit 1
 fi
 
-# relay 시작 — 이중 fork로 init에 reparent (ADB 세션 종료에도 생존)
+# 기존 relay 죽이고 새 relay 띄움 (이중 fork로 PPID=1)
 adb -s localhost:$PORT shell \
-    "rm -f /data/local/tmp/t33a_relay.pid; (setsid /system/bin/sh $RELAY < /dev/null > /dev/null 2>&1 &)"
-echo "$(date): relay started via ADB" >> "$LOG"
-sleep 5
+    "OLD=\$(cat $RELAY_PID_FILE 2>/dev/null); [ -n \"\$OLD\" ] && kill \$OLD 2>/dev/null; rm -f $RELAY_PID_FILE; (setsid /system/bin/sh $RELAY < /dev/null > /dev/null 2>&1 &)"
+echo "$(date): old relay killed, new relay started" >> "$LOG"
+sleep 2
 
 termux-toast "T33A 재시작됨"
 echo "$(date): done" >> "$LOG"

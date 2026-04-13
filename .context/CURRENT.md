@@ -21,8 +21,6 @@ T33A BLE 리모컨 키 리매퍼 — Mac zig 크로스 컴파일 + adb 원클릭
 - (없음)
 
 ## ⏩ Next Actions
-- [ ] (옥의 티) 위젯 탭이 매번 slow path만 탐 (16~18초). t33a_start.sh의 fast path가 Termux→shell PID에 /proc 접근 차단으로 실패. fast path를 ADB loopback으로 재작성하면 1초로 단축 가능
-- [ ] (옥의 티) 위젯 탭마다 relay 프로세스 +1 누적 (무해하지만 cleanup 필요)
 - [ ] 재부팅 후 boot.sh 자동 시작 검증 (이번 수정: WiFi ADB 자동 활성화 + 자체 설치)
 - [ ] tap 방식 반응속도 개선 (현재 system("input tap") ~300ms)
 

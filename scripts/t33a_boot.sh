@@ -61,7 +61,7 @@ adb -s localhost:$PORT shell echo ok >> "$LOG" 2>&1 || {
 
 # relay 기동 — 이중 fork로 init(PID 1)에 reparent (ADB 세션 종료에도 생존)
 adb -s localhost:$PORT shell \
-    "rm -f /data/local/tmp/t33a_relay.pid; (setsid /system/bin/sh $RELAY < /dev/null > /dev/null 2>&1 &)"
+    "OLD=\$(cat /data/local/tmp/t33a_relay.pid 2>/dev/null); [ -n \"\$OLD\" ] && kill \$OLD 2>/dev/null; rm -f /data/local/tmp/t33a_relay.pid; (setsid /system/bin/sh $RELAY < /dev/null > /dev/null 2>&1 &)"
 echo "$(date): relay launched (double-fork)" >> "$LOG"
 sleep 5
 
@@ -85,7 +85,7 @@ while true; do
     if $RELAY_DEAD; then
         echo "$(date): relay dead — restarting" >> "$LOG"
         adb -s localhost:$PORT shell \
-            "rm -f /data/local/tmp/t33a_relay.pid; (setsid /system/bin/sh $RELAY < /dev/null > /dev/null 2>&1 &)"
+            "OLD=\$(cat /data/local/tmp/t33a_relay.pid 2>/dev/null); [ -n \"\$OLD\" ] && kill \$OLD 2>/dev/null; rm -f /data/local/tmp/t33a_relay.pid; (setsid /system/bin/sh $RELAY < /dev/null > /dev/null 2>&1 &)"
         sleep 5
     elif $DAEMON_DEAD; then
         echo "$(date): daemon dead — restarting via relay" >> "$LOG"
