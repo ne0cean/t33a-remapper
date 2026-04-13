@@ -21,22 +21,13 @@ T33A BLE 리모컨 키 리매퍼 — Mac zig 크로스 컴파일 + adb 원클릭
 - (없음)
 
 ## ⏩ Next Actions
-- [ ] **위젯 ~/.shortcuts/T33A 정상화** — `cat ~/.shortcuts/T33A` 출력이 0바이트로 의심됨 (지난번 cp가 silent fail). Termux에서 cat heredoc으로 직접 작성해야 함:
-  ```
-  mkdir -p ~/.shortcuts && cat > ~/.shortcuts/T33A << 'WRAPPER'
-  #!/data/data/com.termux/files/usr/bin/bash
-  echo "$(date): widget invoked" >> /sdcard/Download/t33a_widget_debug.log
-  bash /data/local/tmp/t33a_start.sh 2>>/sdcard/Download/t33a_widget_debug.log
-  WRAPPER
-  chmod +x ~/.shortcuts/T33A
-  cat ~/.shortcuts/T33A
-  ```
-  ADB shell로는 Android 14+ 데이터 격리로 접근 불가 — Termux 안에서만 가능
+- [ ] (옥의 티) 위젯 탭이 매번 slow path만 탐 (16~18초). t33a_start.sh의 fast path가 Termux→shell PID에 /proc 접근 차단으로 실패. fast path를 ADB loopback으로 재작성하면 1초로 단축 가능
+- [ ] (옥의 티) 위젯 탭마다 relay 프로세스 +1 누적 (무해하지만 cleanup 필요)
 - [ ] 재부팅 후 boot.sh 자동 시작 검증 (이번 수정: WiFi ADB 자동 활성화 + 자체 설치)
 - [ ] tap 방식 반응속도 개선 (현재 system("input tap") ~300ms)
 
 ## 📝 Recent Activity
-- **2026-04-13**: 데몬 부활 + 인프라 4가지 근본 버그 수정. ① WiFi ADB가 OS 업데이트로 비활성화되어 boot.sh가 ADB connect 실패 → boot.sh에 `settings put global adb_wifi_enabled 1` 추가. ② Windows Git의 LF→CRLF 자동 변환으로 Android `/system/bin/sh`에서 syntax error → `.gitattributes`로 `*.sh eol=lf` 강제. ③ ADB shell의 `nohup` 프로세스가 USB 분리 시 같이 죽음 → `(setsid ... &)` 이중 fork로 init reparent. ④ start.sh fast-path가 Termux(u0_a533)에서 shell 유저 PID에 `kill -0` 불가 → `[ -d /proc/$PID ]`로 변경. boot.sh에 자체 설치 로직(매 실행마다 ~/.termux/boot/, ~/.shortcuts/ 동기화) 추가. 데몬+relay PPID=1로 안정 가동, BLE 리매핑 정상 동작 확인. 위젯 wrapper는 ADB 격리로 자동 설치 불가 — Termux에서 1회 수동 작업 필요(미해결).
+- **2026-04-13**: 데몬 부활 + 인프라 4가지 근본 버그 수정 + **위젯 핵심 진단**. ① WiFi ADB가 OS 업데이트로 비활성화 → boot.sh에 `settings put global adb_wifi_enabled 1` 추가. ② Windows Git의 LF→CRLF 변환으로 Android `sh` syntax error → `.gitattributes`로 `*.sh eol=lf` 강제. ③ ADB shell의 `nohup`이 USB 분리 시 죽음 → `(setsid ... &)` 이중 fork로 PPID=1. ④ start.sh fast-path Termux→shell PID 접근 불가 (SELinux). boot.sh에 자체 설치/동기화 로직 추가. **위젯 문제 결론: ~/.shortcuts/T33A 파일이 깨져있을 때 ADB로 절대 못 만짐. 사용자 인사이트로 "이름 다른 새 shortcut 만들면 작동" 검증 — Termux에서 `cp /sdcard/Download/T33A_wrapper ~/.shortcuts/T33A_NEW`만 하면 즉시 위젯 동작 (T33A_NEW 탭 → wrapper 실행 → debug log 기록 → relay 부활 e2e 검증 22:34/22:36 두번 성공)**. BLE 리매핑 정상.
 - **2026-04-07**: KEY_H 미동작 해결. 원인: 말해보카 1.2.398(04-02 업데이트)이 KEYCODE_H 키보드 입력 무시. 해결: `tap` 매핑 도입 — T33A 파워키 → `system("input tap 1050 1330")` 으로 화면 좌표 직접 탭. MSC_SCAN 드롭 (KEYCODE_UNKNOWN 오인 방지). README 최신화. 위젯 → relay → 데몬 재시작 e2e 검증 완료.
 - **2026-04-05**: 데몬 안정화. relay 구조 도입 (watchdog 대체, 5초 헬스체크), termux-wake-lock으로 Samsung kill 방지, remove_pid() 레이스 컨디션 픽스, 위젯 fast path 구현 (~1초). Termux 홈 ADB 격리(Android 14+)로 ~/.shortcuts 직접 수정 불가.
 - **2026-04-03**: [Windows] `CLAUDE.md` 가이드 생성. 더블클릭 간격 0ms 테스트를 위해 `src/t33a_remap.c` 수정 및 Zig Windows 크로스 컴파일(aarch64) 성공. `build/t33a_remap` 생성 및 실기기 배포 완료 (PID 28849).

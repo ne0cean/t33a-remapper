@@ -15,9 +15,16 @@
 - boot.sh 자체 설치/동기화 로직 (매 실행 시 ~/.termux/boot/, ~/.shortcuts/ 갱신)
 - 데몬+relay+supervisor+worker 전부 PPID=1로 안정 가동 확인, BLE 리매핑 정상 동작 e2e 검증
 
-**이슈 (미해결)**:
-- 위젯 ~/.shortcuts/T33A 빈 파일 의심 — 사용자가 cp 실행했지만 cat 출력 0바이트. ADB shell은 Android 14+ 데이터 격리로 Termux 디렉토리 접근 불가 → cp heredoc 우회 작성 필요 (Termux 안에서만 가능). 사용자 수동 작업 1회 남음.
-- 위젯 fast-path가 작동해도 데몬 죽으면 수동 부활 버튼이 필요한데, 위젯 자체가 안 됨
+**위젯 문제 해결 (사용자 인사이트로 돌파)**:
+- 진단 막힘: `cat ~/.shortcuts/T33A` 출력 0바이트로 의심됐으나 ADB로 검증/수정 불가
+- 사용자 제안: "이름 똑같으면 리프레시 됐는지 시각적 확인 못 하니까 이름 바꿔봐"
+- Termux에서 `cp /sdcard/Download/T33A_wrapper ~/.shortcuts/T33A_NEW && chmod +x ...` 한 줄
+- 위젯 리프레시 → T33A_NEW 새 항목 표시 → 탭 → **즉시 작동** (debug log + boot.log + relay log 모두 e2e 검증, 22:34/22:36 두번 연속 성공)
+- 결론: 기존 T33A 파일이 broken state였음. 이름 다른 새 wrapper로 우회 = 정답
+
+**옥의 티 (다음 세션)**:
+- t33a_start.sh의 fast path가 Termux→shell /proc 격리로 항상 실패 → 매 위젯 탭이 16~18초 slow path. ADB loopback으로 fast path 재작성 필요
+- 위젯 탭마다 relay 프로세스 +1 누적 (무해)
 
 **교훈**:
 - Windows에서 push하는 쉘 스크립트는 반드시 `.gitattributes`로 EOL 고정. autocrlf 영향 받으면 Android에서 즉사

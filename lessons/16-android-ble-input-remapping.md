@@ -121,16 +121,21 @@ BLE 리모컨(T33A)의 물리 버튼 3개(POWER, ENTER, HOME)를 영어 단어 �
 - `pm clear com.termux.widget` → 다른 위젯도 다 날아감, 같은 결과
 - `run-as com.termux` → "package not debuggable"
 
-**✅ 유일한 해결책 — 사용자에게 Termux에서 한 줄 부탁 (cp 대신 cat heredoc)**:
+**✅ 유일한 해결책 — 사용자에게 Termux에서 한 줄 부탁 (이름 다른 NEW shortcut 만들기)**:
 ```bash
-mkdir -p ~/.shortcuts && cat > ~/.shortcuts/T33A << 'WRAPPER'
-#!/data/data/com.termux/files/usr/bin/bash
-echo "$(date): widget invoked" >> /sdcard/Download/t33a_widget_debug.log
-bash /data/local/tmp/t33a_start.sh 2>>/sdcard/Download/t33a_widget_debug.log
-WRAPPER
-chmod +x ~/.shortcuts/T33A && cat ~/.shortcuts/T33A
+cp /sdcard/Download/T33A_wrapper ~/.shortcuts/T33A_NEW && chmod +x ~/.shortcuts/T33A_NEW && ls ~/.shortcuts/
 ```
-**왜 cp 대신 cat heredoc**: cp가 silent fail 케이스 빈번. heredoc은 stdin 직접 쓰기라 명확.
+사용자가 위젯 리프레시 → T33A_NEW 새 항목 보이면 → 탭하면 동작.
+
+**왜 이름을 바꾸는가** (이게 가장 중요한 인사이트):
+- 같은 이름(T33A)으로 재작성하면 사용자가 위젯 리프레시 후에도 시각적으로 변화 없어 작동 여부 확인 불가
+- 다른 이름(T33A_NEW)이 위젯에 새로 뜨는 것 자체가 = 위젯 메커니즘 정상 작동의 증거
+- 만약 새 이름이 안 뜨면 위젯 캐시 stuck → 위젯 삭제 후 재추가 단계로
+- 새 이름이 뜨고 탭이 동작하면 → 기존 동명 파일이 broken 이었던 것 (cp가 silent fail이거나 OLD wrapper가 SELinux exec 차단당함 등)
+
+**왜 cp 대신 (필요하면) cat heredoc**: cp가 silent fail 케이스 빈번. 그래도 cat heredoc보다 cp가 짧으니 먼저 cp 시도.
+
+**ADB로 옛날 추정 경로에 alias 깔기는 의미 없음**: 위젯이 ~/.shortcuts/T33A만 호출함 (logcat 확인 완료). /sdcard/Download/t33a.sh 등에 wrapper 깔아도 호출 안 됨.
 
 **위젯 탭 후 검증**:
 ```
