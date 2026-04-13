@@ -1,35 +1,74 @@
 # Current Status (remote-H)
 
-## 📌 One-Line Summary
-T33A BLE 리모컨 키 리매퍼 — Mac zig 크로스 컴파일 + adb 원클릭 배포 + Termux:Widget 원터치 시작
+## 📌 프로젝트 목적 (READ FIRST)
+T33A BLE 리모컨 키를 말해보카 앱에서 사용하도록 커널 레벨 리매핑.
+
+**설계 원칙 (변경 금지)**:
+1. **설치 후 PC 연결 불필요** — Termux:Boot가 재부팅 시 자동으로 데몬 기동. 영구 standalone
+2. **위젯은 백업** — 자동화가 깨졌을 때 **폰에서만** 원탭 복구 (홈 화면 Termux:Widget)
+3. **PC ADB가 필요한 순간 = 설계 실패 상태** — 이 경우 근본 원인 찾아 재발 방지
+
+**아키텍처 (core)**:
+```
+[재부팅]
+  ↓
+Termux:Boot → ~/.termux/boot/t33a_boot.sh (Termux 유저)
+  ↓
+  termux-wake-lock (Samsung kill 방지)
+  ↓
+  adb connect localhost:$PORT (WiFi ADB loopback으로 shell 유저 컨텍스트 획득)
+  ↓
+  adb shell → t33a_relay.sh 이중 fork (PPID=1, shell 유저)
+  ↓
+  relay → t33a_remap (supervisor + worker, shell 유저)
+  ↓
+  /dev/input/* EVIOCGRAB + /dev/uinput 주입
+```
+
+**왜 ADB loopback이 필요한가**: `/dev/input/*`, `/dev/uinput`은 shell 그룹만 접근 가능. Termux 앱 유저(u0_a533)는 shell 그룹 아님. ADB loopback이 shell 유저 bootstrap의 **유일한 경로** (비루팅 환경). 데몬 한 번 기동되면 PPID=1이라 ADB 없어도 생존.
+
+**위젯 동작**: 탭 → ~/.shortcuts/T33A (wrapper) → /data/local/tmp/t33a_start.sh → CMD 파일(/sdcard/Download/t33a.cmd)에 restart → relay가 1초 안에 감지해서 데몬 재시작 (fast path). relay 죽었으면 ADB loopback으로 재기동 (slow path).
 
 ## 🎯 Current Goals
-- [x] Initialize `.agent/` structure <!-- id: 0 -->
-- [x] Initialize `.context/` structure <!-- id: 1 -->
-- [x] Initialize `tasks/` and `lessons/` <!-- id: 2 -->
-- [x] Set up `CLAUDE.md` entry point <!-- id: 3 -->
-- [x] T33A 리모컨 키 매핑 문제 분석 (KEY_POWER→화면 끄기) <!-- id: 5 -->
-- [x] EVIOCGRAB + uinput C 데몬 작성 및 배포 <!-- id: 6 -->
-- [x] 데몬 v2: daemonize + BLE 자동 재연결 <!-- id: 7 -->
-- [x] Termux:Boot/Widget 자동 시작 스크립트 <!-- id: 8 -->
-- [x] GitHub 레포 생성 및 푸시 <!-- id: 9 -->
-- [x] watchdog 알림(termux-notification) 연동 완성 <!-- id: 13 -->
-- [x] Termux:Boot boot 스크립트에 watchdog 통합 완료 <!-- id: 14 -->
-- [x] 리매핑 테이블 커스터마이즈 기능 (config 파일 방식) <!-- id: 11 -->
+- [x] EVIOCGRAB + uinput C 데몬
+- [x] Termux:Boot/Widget 자동 시작 스크립트
+- [x] watchdog (relay) + termux-wake-lock + Samsung kill 대응
+- [x] 리매핑 테이블 커스터마이즈 (t33a.conf)
+- [x] CRLF 트랩 영구 방지 (.gitattributes eol=lf)
+- [x] 이중 fork로 PPID=1 (USB/ADB 분리 시에도 생존)
+- [x] 위젯 fast path 1초 응답 (cmd 파일 소비 판정)
+- [x] CMD 파일 /sdcard로 이동 (Termux가 /data/local/tmp에 write 불가)
+- [ ] **자동 부팅 신뢰성 검증 — 현재 깨져있음 (아래 Blockers 참조)**
 
 ## 🛠 Working On
-- (없음)
+(없음)
 
-## ⏩ Next Actions
-- [ ] 재부팅 후 boot.sh 자동 시작 검증 (이번 수정: WiFi ADB 자동 활성화 + 자체 설치)
-- [ ] tap 방식 반응속도 개선 (현재 system("input tap") ~300ms)
+## ⏩ Next Tasks (우선순위 순)
+1. **boot.sh가 ~/.termux/boot/에 실제로 설치되어 있는지 확인** — 오늘 재부팅 후 boot.log에 `boot started` 항목 없음. 미설치일 가능성 ≥ 90%. `ls ~/.termux/boot/` 결과 필요 (Termux 안에서)
+2. 미설치면 `cp /data/local/tmp/t33a_boot.sh ~/.termux/boot/t33a_boot.sh && chmod +x ...` (Termux 1회)
+3. 재부팅 실시험 — boot.log에 `boot started` 찍히는지, 데몬 자동 기동되는지
+4. 반복 테스트 3회 — 매번 정상 부팅되면 진짜 standalone
+
+## 🚧 Blockers (현재 자동화 깨진 이유 분석)
+**증상**: 2026-04-14 07:07 재부팅 후 boot.log 새 항목 없음. 데몬/relay 전부 사라짐. 위젯 탭하면 slow path에서 1시간 이상 멈춤.
+
+**가장 유력한 근본 원인**:
+- `~/.termux/boot/t33a_boot.sh` 미설치 (또는 설치됐으나 실행 권한 없음)
+- Claude가 shell 유저로 ADB를 통해 cp 시도한 건 전부 Permission denied로 실패. Termux 안에서만 설치 가능
+- 지난 세션에서 boot.sh에 자체 설치 로직 추가했으나, 사용자가 수동 실행 안 했으면 자체 설치도 안 일어남 (boot.sh가 돌아야 자체 설치 로직도 돌아감 → 닭-달걀)
+
+**확정 불가 (검증 필요)**:
+- ~/.termux/boot/ 디렉토리 존재 여부 — ADB로 `ls` 시도 시 Permission denied라 확인 불가
+- Termux:Boot 앱 자체의 상태 — 정상 설치됐는지, 배터리 최적화 예외 등록됐는지
+
+**Android 14+ 데이터 격리로 ADB로 진단/수정 모두 불가**. Termux 안에서 사용자가 직접 확인해야 함.
 
 ## 📝 Recent Activity
-- **2026-04-13**: 데몬 부활 + 인프라 4가지 근본 버그 수정 + **위젯 핵심 진단**. ① WiFi ADB가 OS 업데이트로 비활성화 → boot.sh에 `settings put global adb_wifi_enabled 1` 추가. ② Windows Git의 LF→CRLF 변환으로 Android `sh` syntax error → `.gitattributes`로 `*.sh eol=lf` 강제. ③ ADB shell의 `nohup`이 USB 분리 시 죽음 → `(setsid ... &)` 이중 fork로 PPID=1. ④ start.sh fast-path Termux→shell PID 접근 불가 (SELinux). boot.sh에 자체 설치/동기화 로직 추가. **위젯 문제 결론: ~/.shortcuts/T33A 파일이 깨져있을 때 ADB로 절대 못 만짐. 사용자 인사이트로 "이름 다른 새 shortcut 만들면 작동" 검증 — Termux에서 `cp /sdcard/Download/T33A_wrapper ~/.shortcuts/T33A_NEW`만 하면 즉시 위젯 동작 (T33A_NEW 탭 → wrapper 실행 → debug log 기록 → relay 부활 e2e 검증 22:34/22:36 두번 성공)**. BLE 리매핑 정상.
-- **2026-04-07**: KEY_H 미동작 해결. 원인: 말해보카 1.2.398(04-02 업데이트)이 KEYCODE_H 키보드 입력 무시. 해결: `tap` 매핑 도입 — T33A 파워키 → `system("input tap 1050 1330")` 으로 화면 좌표 직접 탭. MSC_SCAN 드롭 (KEYCODE_UNKNOWN 오인 방지). README 최신화. 위젯 → relay → 데몬 재시작 e2e 검증 완료.
-- **2026-04-05**: 데몬 안정화. relay 구조 도입 (watchdog 대체, 5초 헬스체크), termux-wake-lock으로 Samsung kill 방지, remove_pid() 레이스 컨디션 픽스, 위젯 fast path 구현 (~1초). Termux 홈 ADB 격리(Android 14+)로 ~/.shortcuts 직접 수정 불가.
-- **2026-04-03**: [Windows] `CLAUDE.md` 가이드 생성. 더블클릭 간격 0ms 테스트를 위해 `src/t33a_remap.c` 수정 및 Zig Windows 크로스 컴파일(aarch64) 성공. `build/t33a_remap` 생성 및 실기기 배포 완료 (PID 28849).
-- **2026-04-02**: Windows zig 크로스 빌드 환경 구축. KEY_1(홈버튼) 더블클릭 기능 구현 (dbl 플래그, 8ms 간격). 위젯 adb 다중 디바이스 오류 수정 (`-s localhost:$PORT`). SCHED_FIFO 시도 (-O2 빌드). 데몬 상시 구동 확인 및 재시작.
-- **2026-04-01**: Mac zig 크로스 컴파일 도입 (brew 우회, 직접 다운로드 ~/tools/). `t33a.sh deploy` 원클릭 빌드+배포+재시작. 폰 Termux:Widget `/sdcard/Download/t33a.sh` 현재 구조 맞게 업데이트 (su 제거, /data/local/tmp 경로). 데몬 정상 확인 (PID 19551).
-- **2026-03-29**: uinput 디바이스 분류 수정 (GAMEPAD→KEYBOARD|TOUCH|EXTERNAL). IME 복원 (MoAKey→Honeyboard). zig cc 크로스 컴파일 도입. 말해보카 앱에서 3개 키 정상 동작 확인.
-- **2026-03-28**: T33A 리매퍼 전체 구현 완료. EVIOCGRAB C 데몬, Termux:Boot/Widget 스크립트, GitHub 레포 (ne0cean/t33a-remapper) 생성.
+- **2026-04-14**: 자동화 깨짐 발견. 재부팅 후 boot.log 새 항목 없음 — boot.sh 자동 실행 안 됨. 원인은 `~/.termux/boot/` 미설치로 추정. 위젯도 slow path에서 무한 대기. USB ADB로 임시 복구 (relay PID 20210). **영구 해결은 Termux 내 boot.sh 수동 설치 필요**. 프로젝트 목적(설치 후 PC 불필요) 재확인 — Claude가 그동안 "USB로 고치기" 방향을 잃고 있었음을 사용자가 지적.
+- **2026-04-13**: 데몬 인프라 4종 근본 버그 수정 (WiFi ADB 자동 활성화, CRLF 방지, 이중 fork PPID=1, /proc 권한 우회). 위젯 fast path 16s→1s 개선 (cmd 파일 소비 판정). CMD 파일 /data/local/tmp→/sdcard 이동 (Termux write 권한 차이). 위젯 wrapper ~/.shortcuts/T33A 정상화 — 사용자가 Termux에서 직접 작성해야 했음. 레슨 16에 위젯 진단 STOP 신호 추가.
+- **2026-04-07**: KEY_H 미동작 해결 — `tap` 매핑 도입. T33A 파워키 → 화면 좌표 탭.
+- **2026-04-05**: relay 구조 도입, termux-wake-lock, 위젯 fast path 최초 구현.
+- **2026-04-02**: Windows zig 크로스 빌드, KEY_1 더블클릭, adb -s localhost:$PORT 수정.
+- **2026-04-01**: Mac zig 크로스 컴파일, t33a.sh deploy 원클릭.
+- **2026-03-29**: uinput 분류 수정 (GAMEPAD→KEYBOARD|TOUCH|EXTERNAL).
+- **2026-03-28**: 전체 구현 완료.
