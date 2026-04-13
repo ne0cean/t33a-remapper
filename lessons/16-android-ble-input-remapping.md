@@ -102,6 +102,102 @@ BLE 리모컨(T33A)의 물리 버튼 3개(POWER, ENTER, HOME)를 영어 단어 �
 
 ---
 
+## 교훈 6: Termux:Widget 안 먹힐 때 — ⚠️ STOP, 시간 낭비 금지
+
+**증상**: 위젯 탭해도 토스트 안 뜸, boot.log/widget log에 흔적 없음. 위젯 재추가도 효과 없음.
+
+**근본 원인 (둘 중 하나)**:
+1. `~/.shortcuts/T33A` 파일이 0바이트 — 이전 `cp /sdcard/Download/T33A_wrapper ~/.shortcuts/T33A`가 silent fail
+2. Windows에서 push한 wrapper 스크립트의 CRLF — Android sh 즉사 (교훈 8 참조)
+
+**❌ 절대 시도 금지 (모두 시간 낭비, 검증 완료)**:
+- `adb shell cat ~/.shortcuts/T33A` → Permission denied (Android 14+ 격리)
+- `adb shell cp ... ~/.shortcuts/` → Permission denied
+- `am startservice ... com.termux.app.RunCommandService` → `RUN_COMMAND` 권한 필요. Termux properties 변경 필요. chicken-egg
+- `am broadcast com.termux.RUN_COMMAND` → 같은 권한 문제
+- `input text "bash ..."` → Termux 터미널이 input text 안 받음. 또는 한글 IME가 가로채서 깨진 한글 입력됨
+- `input keyevent` 연속 입력 → Termux 키보드 채널 막힘
+- 위젯 long-press / RELOAD broadcast → 바인딩 새로고침은 되지만 빈 파일은 그대로
+- `pm clear com.termux.widget` → 다른 위젯도 다 날아감, 같은 결과
+- `run-as com.termux` → "package not debuggable"
+
+**✅ 유일한 해결책 — 사용자에게 Termux에서 한 줄 부탁 (cp 대신 cat heredoc)**:
+```bash
+mkdir -p ~/.shortcuts && cat > ~/.shortcuts/T33A << 'WRAPPER'
+#!/data/data/com.termux/files/usr/bin/bash
+echo "$(date): widget invoked" >> /sdcard/Download/t33a_widget_debug.log
+bash /data/local/tmp/t33a_start.sh 2>>/sdcard/Download/t33a_widget_debug.log
+WRAPPER
+chmod +x ~/.shortcuts/T33A && cat ~/.shortcuts/T33A
+```
+**왜 cp 대신 cat heredoc**: cp가 silent fail 케이스 빈번. heredoc은 stdin 직접 쓰기라 명확.
+
+**위젯 탭 후 검증**:
+```
+adb shell cat /sdcard/Download/t33a_widget_debug.log
+```
+"widget invoked" 줄 보이면 wrapper 동작.
+
+---
+
+## 교훈 7: ADB shell 백그라운드 프로세스 — `nohup`만 쓰면 USB 분리 시 죽는다
+
+**증상**: `adb shell nohup CMD &`로 띄운 데몬이 USB 뺄 때 같이 죽음.
+
+**❌ 안 되는 패턴**:
+```bash
+adb shell "nohup /path/to/daemon > /dev/null 2>&1 &"
+adb shell "setsid nohup /path/to/daemon < /dev/null > /dev/null 2>&1 &"
+```
+→ PPID가 ADB shell 또는 자식. ADB 세션 종료 시 죽음.
+
+**✅ 되는 패턴 — 이중 fork로 init(PID 1)에 reparent**:
+```bash
+adb shell "(setsid /path/to/daemon < /dev/null > /dev/null 2>&1 &)"
+```
+→ 서브쉘 즉시 종료 → orphan 프로세스가 init에 reparent → PPID=1.
+
+**검증**: `adb shell "ps -ef | grep daemon"` — PPID 컬럼이 1이어야 정답.
+
+---
+
+## 교훈 8: Windows에서 Git push 시 쉘 스크립트 CRLF 트랩
+
+**증상**: Android에서 `bash script.sh` → `syntax error: unmatched 'if'` 같은 알 수 없는 syntax error.
+
+**원인**: Windows Git의 `core.autocrlf=true`가 LF→CRLF로 자동 변환. `/system/bin/sh`(toybox)가 `\r` 처리 못함.
+
+**확인**: `adb shell "xxd script.sh | head -2"` — 줄 끝 `0d0a`면 CRLF (KILL), `0a`만 LF (OK).
+
+**영구 해결 — `.gitattributes`**:
+```
+*.sh text eol=lf
+*.conf text eol=lf
+```
+기존 파일 재스테이징:
+```bash
+git rm --cached scripts/*.sh && git add scripts/*.sh && git commit -m "fix: enforce LF"
+```
+
+**1회 임시**: `sed -i 's/\r$//' scripts/*.sh && adb push ...`
+
+---
+
+## 교훈 9: Android 14+ 데이터 격리 — ADB shell이 Termux 절대 못 만진다
+
+**팩트**: `adb shell ls /data/data/com.termux/files/home/` → Permission denied. Termux 사용자(u0_a533) 디렉토리는 shell(uid 2000)이 절대 R/W 못함. Android 14+ 강화된 SELinux + 앱별 sandbox.
+
+**우회 시도 모두 실패**:
+- `run-as com.termux` → not debuggable
+- ADB backup → Termux backup 비허용
+- Termux RUN_COMMAND 인텐트 → `~/.termux/termux.properties`의 `allow-external-apps=true` 필요. 그 파일도 Termux 안에 있어 chicken-egg
+
+**유일한 길**: 사용자가 Termux 안에서 명령 직접 실행. **ADB shell만으로는 절대 못 만진다. 시도하지 말 것.**
+
+**예외**: `/sdcard/`(MediaStore)는 양쪽 다 R/W. 데이터 교환은 항상 sdcard 경유 (예: `/sdcard/Download/T33A_wrapper`).
+
+---
+
 ## 태스크 매핑
 
 | 작업 유형 | 이 레슨에서 볼 것 |
@@ -109,4 +205,7 @@ BLE 리모컨(T33A)의 물리 버튼 3개(POWER, ENTER, HOME)를 영어 단어 �
 | BLE/USB HID 디바이스 리매핑 | 교훈 1, 2 |
 | Android 자동화/스크립팅 | 교훈 3, 4 |
 | 루팅 없는 디바이스 제어 | 교훈 5 |
-| 데몬 프로세스 설계 | 교훈 1 (시그널 핸들링, PID 관리) |
+| 데몬 프로세스 설계 | 교훈 1 (시그널), 7 (이중 fork) |
+| **Termux:Widget 안 됨 진단** | **교훈 6 (먼저 읽고 시간 낭비 막기)** |
+| Windows에서 Android 스크립트 푸시 | 교훈 8 (CRLF) |
+| Termux 디렉토리 ADB로 만지기 | 교훈 9 (절대 안 됨) |
