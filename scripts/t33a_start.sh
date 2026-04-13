@@ -12,9 +12,10 @@ PORT=5555
 echo "" >> "$LOG"
 echo "$(date): === widget tap ===" >> "$LOG"
 
-# ── Fast path ──────────────────────────────────────────────
+# ── Fast path: relay가 살아있으면 cmd 파일로 재시작 요청 ──
+# Termux(u0_a533)에서 shell 유저 프로세스는 kill -0 불가 → /proc/PID 존재로 확인
 RPID=$(cat "$RELAY_PID_FILE" 2>/dev/null)
-if [ -n "$RPID" ] && kill -0 "$RPID" 2>/dev/null; then
+if [ -n "$RPID" ] && [ -d "/proc/$RPID" ]; then
     echo restart > "$CMD"
     echo "$(date): fast path — relay PID $RPID" >> "$LOG"
     termux-toast "T33A 재시작 중"
@@ -35,8 +36,11 @@ sleep 2
 
 connected=false
 for i in $(seq 1 15); do
+    PORT=$(getprop service.adb.tls.port 2>/dev/null)
+    [ -z "$PORT" ] || [ "$PORT" = "0" ] && PORT=$(getprop service.adb.tcp.port 2>/dev/null)
+    [ -z "$PORT" ] || [ "$PORT" = "0" ] && PORT=5555
     result=$(adb connect localhost:$PORT 2>&1)
-    echo "$(date): connect #$i: $result" >> "$LOG"
+    echo "$(date): connect #$i (port=$PORT): $result" >> "$LOG"
     if echo "$result" | grep -q "connected"; then
         connected=true
         break
@@ -50,9 +54,9 @@ if ! $connected; then
     exit 1
 fi
 
-# relay 시작 (relay가 데몬까지 기동)
+# relay 시작 — 이중 fork로 init에 reparent (ADB 세션 종료에도 생존)
 adb -s localhost:$PORT shell \
-    "setsid nohup $RELAY < /dev/null > /dev/null 2>&1 &"
+    "rm -f /data/local/tmp/t33a_relay.pid; (setsid /system/bin/sh $RELAY < /dev/null > /dev/null 2>&1 &)"
 echo "$(date): relay started via ADB" >> "$LOG"
 sleep 5
 

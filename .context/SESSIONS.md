@@ -5,6 +5,29 @@
 
 ---
 
+## [2026-04-13] (Windows / Claude Code) - [데몬 부활 + 인프라 4종 근본버그 수정]
+
+**완료**:
+- WiFi ADB 비활성화 대응 — boot.sh에 `settings put global adb_wifi_enabled 1` 추가 (OS 업데이트가 리셋함)
+- CRLF 킬러 — Windows Git 자동변환으로 Android sh가 syntax error → `.gitattributes`로 `*.sh eol=lf` 강제
+- 프로세스 생존성 — ADB shell의 `nohup`이 USB 분리 시 같이 죽음 → `(setsid ... &)` 이중 fork로 init reparent (PPID=1)
+- start.sh fast-path 권한 — Termux에서 shell PID `kill -0` 불가 → `[ -d /proc/$PID ]` 우회
+- boot.sh 자체 설치/동기화 로직 (매 실행 시 ~/.termux/boot/, ~/.shortcuts/ 갱신)
+- 데몬+relay+supervisor+worker 전부 PPID=1로 안정 가동 확인, BLE 리매핑 정상 동작 e2e 검증
+
+**이슈 (미해결)**:
+- 위젯 ~/.shortcuts/T33A 빈 파일 의심 — 사용자가 cp 실행했지만 cat 출력 0바이트. ADB shell은 Android 14+ 데이터 격리로 Termux 디렉토리 접근 불가 → cp heredoc 우회 작성 필요 (Termux 안에서만 가능). 사용자 수동 작업 1회 남음.
+- 위젯 fast-path가 작동해도 데몬 죽으면 수동 부활 버튼이 필요한데, 위젯 자체가 안 됨
+
+**교훈**:
+- Windows에서 push하는 쉘 스크립트는 반드시 `.gitattributes`로 EOL 고정. autocrlf 영향 받으면 Android에서 즉사
+- ADB shell의 백그라운드 프로세스는 항상 `(setsid CMD &)` 이중 fork로 init reparent 필요. `nohup`만으론 USB 분리 시 죽음
+- Android 14+ 격리: ADB shell 유저는 Termux 앱(u0_a533) 데이터 디렉토리에 R/W 모두 차단. Termux:Widget 바인딩 변경은 Termux 내부에서만 가능
+
+**빌드**: 코드 변경 없음 (스크립트만 수정)
+
+---
+
 ## [2026-04-07] (Mac / Claude Code) - [tap 매핑으로 H키 기능 복원]
 
 **완료**:
