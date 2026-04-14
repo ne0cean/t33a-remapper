@@ -35,7 +35,8 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 5. **완전 standalone 대신 "재부팅 후 위젯 탭 1회"** 전략 채택 — boot.sh retry loop + wake-lock으로 사용자가 위젯 탭하는 순간 자동 복구. [lessons/16 교훈 15](../lessons/16-android-ble-input-remapping.md#교훈-15-bootsh는-절대-fatal-exit-하지-말-것--retry-loop으로-대체)
 
 ## 📝 Recent Activity
-- **2026-04-14**: 레포 + 폰 대청소. scripts/ 3개만 남김(+widget_reset 신규), `.research/` 삭제, 폰 junk 파일 전부 제거. CLAUDE.md 경로표+진단체크리스트로 재작성. README 간결화. 근본 원인 5종 정리 완료(CRLF/이중fork/SELinux/Termux-write-불가/위젯 shortcut 깨짐). 위젯 원샷 리셋 스크립트 신설. 여전히 미확정: Termux:Boot 자동 시작 실제 fire 여부.
+- **2026-04-14 (후반)**: 재부팅 실시험 + A-Team Termux Control Agent 구축 + 함정 6종 영구 박음. (1) Termux:Boot 실제 8분 지연으로 발화 확인 (차단 아님). (2) ~/.termux/boot/ 직접 R/W는 A-Team termux-ctrl-agent IPC 통해 가능해짐 (Android 14+ 격리 우회). (3) WiFi ADB TLS 페어링 시도했으나 Samsung이 listener 지속 안 함 — 시간 낭비 확정. (4) boot.sh FATAL → retry loop 교체. (5) termux-toast timeout 3 래핑 (2시간+ stuck 해결). (6) agent bash `$()` capture block 버그 수정. lessons/16에 교훈 10~15 추가 + 진단 체크리스트 + CLAUDE.md 함정 테이블. 글로벌 메모리 `feedback_android_termux_traps.md` 저장.
+- **2026-04-14 (전반)**: 레포 + 폰 대청소. scripts/ 3개만 남김(+widget_reset 신규), `.research/` 삭제, 폰 junk 파일 전부 제거. CLAUDE.md 경로표+진단체크리스트로 재작성. README 간결화. 근본 원인 5종 정리 완료(CRLF/이중fork/SELinux/Termux-write-불가/위젯 shortcut 깨짐). 위젯 원샷 리셋 스크립트 신설.
 - **2026-04-13**: fast path 16초→1초 개선 (cmd 소비 판정). CMD 파일 /data/local/tmp → /sdcard. 이중 fork PPID=1. WiFi ADB 자동 활성화. 근본 버그 4종 수정+푸시.
 - **2026-04-07**: KEY_H 미동작 해결 — `tap` 매핑 도입.
 - **2026-04-05**: relay 구조 도입. termux-wake-lock. 위젯 fast path.

@@ -5,6 +5,33 @@
 
 ---
 
+## [2026-04-14] (Windows / Claude Code) - [Android 격리 우회 + 함정 6종 영구 박음]
+
+**완료**:
+- **A-Team Termux Control Agent 구축** — ~/tools/A-Team/scripts/termux-ctrl-agent.sh + governance/skills/termux-remote/SKILL.md. /sdcard를 IPC 채널로 PC ADB ↔ Termux 내부 양방향. 모든 Android/Termux 프로젝트에서 재사용 가능
+- **재부팅 실시험 + 진단** — Termux:Boot이 차단 아닌 "Samsung 8분 지연"으로 발화 확인. `~/.termux/boot/t33a_boot.sh` 설치됨 검증 (MD5 일치)
+- **boot.sh retry loop** — FATAL 대신 무한 대기 + wake-lock 유지 → WiFi ADB 나중에 열리면 자동 복구
+- **termux-toast timeout 3 래핑** — 오늘 아침 2시간+ stuck 재현 → 모든 호출에 timeout 3 적용
+- **agent bash `$()` capture 버그 수정** — background 자식 stdout 상속 → tempfile 리다이렉트 + stdin </dev/null로 해결
+- **폰 cleanup** — 구 t33a_control_agent + IPC 잔재 + termux-api.apk + 디버깅 스크린샷 전부 제거
+- **레슨 영구 박음**: lessons/16 교훈 10~15 + 진단 체크리스트 + 태스크 매핑 확장, CLAUDE.md "이전 세션 함정" 테이블, CURRENT.md "확정된 판단" 섹션, 글로벌 메모리 feedback_android_termux_traps.md
+- 로그 로테이션 (relay.sh) — 1MB 초과 시 tail 500줄
+
+**이슈 (구조적 한계)**:
+- Samsung WiFi ADB TLS 페어링은 지속 listening 안 함 (팝업 열린 동안만). 완전 standalone은 이 환경에서 불가
+- Termux 유저에서 `settings put global` 항상 실패 (INTERACT_ACROSS_USERS 권한 필요, system-only)
+- 현실적 해결: 재부팅 후 위젯 T33A 한 번 탭으로 복구 (boot.sh retry loop + wake-lock이 대기 중)
+
+**교훈**:
+- Samsung 재부팅 검증은 **10분+ 대기 후** 확인 (8분 지연 기본)
+- Termux 내부 R/W는 **무조건 A-Team agent 경유** (ADB 직접 시도 절대 금지)
+- `termux-toast`는 항상 `timeout 3` 래핑
+- bash `$()` capture에 background 자식 있으면 hang — tempfile 사용
+
+**빌드**: 스크립트 수정만, C 데몬 바이너리 변경 없음 (zig 재빌드 불필요)
+
+---
+
 ## [2026-04-13] (Windows / Claude Code) - [데몬 부활 + 인프라 4종 근본버그 수정]
 
 **완료**:
