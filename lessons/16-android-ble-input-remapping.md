@@ -121,11 +121,25 @@ BLE 리모컨(T33A)의 물리 버튼 3개(POWER, ENTER, HOME)를 영어 단어 �
 - `pm clear com.termux.widget` → 다른 위젯도 다 날아감, 같은 결과
 - `run-as com.termux` → "package not debuggable"
 
-**✅ 유일한 해결책 — 사용자에게 Termux에서 한 줄 부탁 (이름 다른 NEW shortcut 만들기)**:
+**✅ 최단 해결 — 원샷 리셋 스크립트** (레포의 [scripts/t33a_widget_reset.sh](../scripts/t33a_widget_reset.sh) 참조):
+
+Termux에서 한 줄:
 ```bash
-cp /sdcard/Download/T33A_wrapper ~/.shortcuts/T33A_NEW && chmod +x ~/.shortcuts/T33A_NEW && ls ~/.shortcuts/
+bash /data/local/tmp/t33a_widget_reset.sh
 ```
-사용자가 위젯 리프레시 → T33A_NEW 새 항목 보이면 → 탭하면 동작.
+
+이 스크립트가:
+1. 멈춘 start.sh/termux-toast 프로세스 정리
+2. `/sdcard/Download/T33A_wrapper` 원본 최신 내용으로 재작성
+3. `~/.shortcuts/T33A` 재작성 + chmod +x
+4. `am broadcast com.termux.widget.RELOAD` 자동 발송
+5. 결과를 `/sdcard/Download/t33a_reset_result.txt` 에 기록 (ADB로 검증 가능)
+
+**이름 바꿔서 검증이 필요한 경우** (지난번 insight — 동명 재작성하면 시각적 변화 없어 리프레시 여부 확인 불가):
+```bash
+cp /sdcard/Download/T33A_wrapper ~/.shortcuts/T33A_NEW && chmod +x ~/.shortcuts/T33A_NEW
+```
+위젯 리프레시 → T33A_NEW 새 항목 표시되면 → 위젯 메커니즘 정상 확인 → 이후 동명 리셋 가능.
 
 **왜 이름을 바꾸는가** (이게 가장 중요한 인사이트):
 - 같은 이름(T33A)으로 재작성하면 사용자가 위젯 리프레시 후에도 시각적으로 변화 없어 작동 여부 확인 불가
