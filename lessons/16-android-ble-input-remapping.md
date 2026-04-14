@@ -215,6 +215,208 @@ git rm --cached scripts/*.sh && git add scripts/*.sh && git commit -m "fix: enfo
 
 **예외**: `/sdcard/`(MediaStore)는 양쪽 다 R/W. 데이터 교환은 항상 sdcard 경유 (예: `/sdcard/Download/T33A_wrapper`).
 
+**우회 구축됨 (2026-04-14)**: [A-Team Termux Control Agent](../../A-Team/governance/skills/termux-remote/SKILL.md) — Termux 안에서 도는 폴링 데몬이 /sdcard를 IPC 채널로 사용. 부트스트랩 1회 후 Claude가 Termux 유저 권한으로 모든 명령 실행 가능. **Android 격리 우회의 표준 해결책**.
+
+---
+
+## 교훈 10: Samsung Termux:Boot은 차단이 아니라 **8분 지연** ⏰
+
+**증상**: 재부팅 후 몇 분 안에 확인하면 `~/.termux/boot/` 스크립트 안 돌아간 상태. "Termux:Boot이 차단됐나?" 오판.
+
+**팩트** (2026-04-14 검증):
+- 13:09 재부팅
+- 13:17:32 Termux:Boot 발화 → **재부팅 후 8분 23초 지연**
+- Samsung이 배터리/CPU 안정화 후 3rd party BOOT_COMPLETED 뒤늦게 전달
+- `deviceidle whitelist`, `appops RUN_IN_BACKGROUND allow` 다 설정해도 지연됨
+
+**잘못된 진단 패턴** (실제 저지른 실수):
+1. 재부팅 후 1-5분 확인 → "프로세스 없음"
+2. "Termux:Boot이 실행 안 됐다" 결론
+3. `~/.termux/boot/t33a_boot.sh` 설치 여부 의심
+4. Samsung 정책 우회 시도
+5. 실제로는 그냥 기다리면 됐음
+
+**✅ 올바른 확인 절차**:
+- 재부팅 후 **최소 10분 대기** 후 확인
+- 또는 `dumpsys usagestats` 에서 `com.termux.boot` `lastTimeUsed` 최근 재부팅 이후인지
+- logcat `grep com.termux.boot` 결과 vs `RestrictedReceiverFilter` 비교 — **명시적 제한 기록 없으면 차단 아님**
+
+**`lastTimeUsed`의 함정**: UI가 foreground로 뜬 시각만 기록. BootReceiver(broadcast) fire는 기록 안 됨. 한 번도 UI 안 열었으면 3-28 (설치 시점)으로 고정. 그래도 Boot은 정상 작동 중일 수 있음.
+
+---
+
+## 교훈 11: Termux(u0_a533)에서 `settings put global` 불가 — INTERACT_ACROSS_USERS 필요
+
+**증상**: `boot.sh`가 `settings put global adb_wifi_enabled 1` 실행. 로그엔 성공처럼 찍히지만 **실제 값은 0 유지**.
+
+**원인**:
+```
+java.lang.SecurityException: Permission Denial: getCurrentUser() from pid=..., uid=10533
+requires android.permission.INTERACT_ACROSS_USERS
+```
+- WRITE_SECURE_SETTINGS만으로는 부족. Android 14+에서 `settings` CLI가 내부적으로 `getCurrentUser()` 호출 → INTERACT_ACROSS_USERS 필요
+- INTERACT_ACROSS_USERS는 system signature-level 권한. 3rd party 앱 불가
+
+**❌ 착각한 패턴** (`settings put` 실패를 감지 못 함):
+```bash
+/system/bin/settings put global adb_wifi_enabled 1 2>/dev/null  # ← 에러 무시
+echo "$(date): adb_wifi_enabled set to 1" >> "$LOG"              # ← 무조건 성공처럼 기록
+```
+→ stderr 버리고 echo는 항상 찍힘. 값 실제 변경 여부 미확인.
+
+**✅ 올바른 검증**:
+```bash
+settings put global adb_wifi_enabled 1 2>/dev/null
+VAL=$(settings get global adb_wifi_enabled 2>/dev/null)
+[ "$VAL" = "1" ] || echo "FAIL: settings put rejected"
+```
+
+**대응**: shell 유저(ADB) 권한이 필요. boot.sh에서 Termux 유저가 못 하는 것. 재부팅 시 WiFi ADB 자동 활성화는 **페어링된 상태의 UI 토글 ON**이 아니면 불가능.
+
+---
+
+## 교훈 12: `termux-toast` 는 foreground blocking — 반드시 `timeout 3` 래퍼 ⚠️
+
+**증상**: 위젯 탭 후 `t33a_start.sh`가 여러 시간 hang. `ps` 보면 `termux-toast T33A: ...` 프로세스가 죽지 않고 있음.
+
+**원인**: `com.termux.api`가 Toast 서비스 응답 지연/중단 시 `termux-toast` 명령이 **foreground에서 영원히 대기**. 기본 timeout 없음.
+
+**실증** (2026-04-14):
+- 07:07:00 사용자 위젯 탭
+- 07:07:02 boot.log "slow path — relay dead" 기록 후 정지
+- 9:52에 확인하니 여전히 stuck — **2시간 45분 hang**
+- PID 25987 `termux-toast T33A: 초기화 중...`가 원인
+
+**❌ 안 되는 패턴**:
+```bash
+termux-toast "message"  # ← 영원히 block 가능
+```
+
+**✅ 올바른 패턴**:
+```bash
+timeout 3 termux-toast "message" 2>/dev/null || true
+```
+
+- `timeout 3`이 3초 후 SIGTERM → 스크립트 계속
+- `2>/dev/null` + `|| true`로 토스트 실패해도 전체 실패 방지
+- 토스트는 UX 보조일 뿐, 실패해도 주 기능은 작동해야
+
+---
+
+## 교훈 13: bash `$()` 캡처 — background 자식이 부모 stdout 상속해 영원히 block
+
+**증상**: agent가 `RESULT=$(timeout 60 bash -c "$CMD" 2>&1)` 로 명령 실행. `CMD` 안에 `cmd &` 형태의 backgrounded 프로세스 있으면 **60초 timeout 지나도 $() 캡처가 안 끝남**. agent 완전 stuck.
+
+**원인**:
+- `bash -c "..."`의 stdout은 `$()` capture 파이프에 연결
+- 내부 background 자식(`&`)은 부모 stdout 상속
+- `bash -c`이 timeout으로 kill 돼도 **orphan 자식은 stdout 파이프 유지**
+- `$()`는 모든 writer의 EOF 대기 → 자식이 exit할 때까지 영원히 block
+- `timeout` 명령이 orphan까지 kill 안 함 (`--foreground` 옵션으로만 가능, 일부 환경 부재)
+
+**❌ 안 되는 패턴**:
+```bash
+RESULT=$(timeout 60 bash -c "$CMD" 2>&1)  # CMD에 '&'가 있으면 hang
+```
+
+**✅ 올바른 패턴** (tempfile + stdin redirect):
+```bash
+OUT_FILE="/sdcard/Download/tmp.$$"
+timeout 60 bash -c "$CMD" > "$OUT_FILE" 2>&1 < /dev/null
+RC=$?
+RESULT=$(cat "$OUT_FILE" 2>/dev/null)
+rm -f "$OUT_FILE"
+```
+
+- stdout/stderr을 파일로 리다이렉트 → $() 없으니 block 없음
+- `< /dev/null` → 자식이 stdin 대기 안 함
+
+**적용됨**: A-Team `termux-ctrl-agent.sh` (commit fb220f9).
+
+---
+
+## 교훈 14: Samsung WiFi ADB TLS은 **지속 listening 안 함** — 페어링해도 쓸모 없음
+
+**증상**: 개발자 옵션 → 무선 디버깅 → TLS 페어링 성공 → 메인 화면 "IP 주소 및 포트" 표시됨 → PC에서 `adb connect IP:PORT` → **`Connection refused`**.
+
+**원인** (2026-04-14 재현):
+- Samsung One UI는 페어링 팝업 열린 동안에만 TLS listener active
+- 페어링 완료 후 팝업 닫히면 TLS 포트 닫힘
+- "무선 디버깅" 토글 ON 유지해도 마찬가지
+- `getprop service.adb.tls.port` 빈 값 — prop 노출 안 됨
+
+**확인 방법**:
+```bash
+adb shell "netstat -tln 2>/dev/null | grep -E ':(5[0-9]{3}|4[0-9]{4})'"
+# TLS 포트 listening 중이면 여기 보임. 빈 결과면 Samsung이 실제로 안 엶
+```
+
+**❌ 시간 낭비 금지**:
+- `adb pair` 성공해도 boot.sh의 ADB loopback 보장 안 됨
+- Samsung에서 WiFi ADB 기반 standalone 완전 자동화는 **실질적으로 불가**
+- Pixel/AOSP와 다름
+
+**✅ 현실적 전략**:
+- boot.sh를 FATAL 대신 retry loop (교훈 15)
+- 위젯 탭으로 수동 복구 (가장 안정)
+- TLS 페어링 설정 시간 투자 대비 효과 없음
+
+---
+
+## 교훈 15: `boot.sh`는 절대 FATAL exit 하지 말 것 — retry loop으로 대체
+
+**문제** (기존 boot.sh):
+```bash
+for i in $(seq 1 20); do
+    adb connect localhost:$PORT || sleep 5
+done
+if ! $connected; then
+    echo "FATAL"; exit 1   # ← 이거 때문에 watchdog 영원히 안 돎
+fi
+```
+
+재부팅 시 Samsung WiFi ADB 꺼진 상태 → 20회 전부 실패 → FATAL → boot.sh 프로세스 종료 → **watchdog 루프 실행 안 됨** → 이후 WiFi ADB 켜져도 자동 복구 영원히 없음.
+
+**해결** (2026-04-14 수정):
+```bash
+connect_adb() { ... }  # 20회 재시도
+
+if ! connect_adb; then
+    # FATAL 대신 무한 대기 루프 + wake-lock 유지
+    while true; do
+        sleep 60
+        /system/bin/settings put global adb_wifi_enabled 1 2>/dev/null
+        connect_adb && break
+    done
+fi
+# → 사용자 위젯 탭, USB 연결, 페어링 등으로 ADB 열리면 자동 복구
+```
+
+**핵심 원칙**: boot.sh는 **죽지 않는다**. termux-wake-lock으로 Termux를 foreground service 유지. 실패해도 대기만. 사용자가 나중에 상황 바꾸면 그때 자동 복구.
+
+---
+
+## 진단 순서 체크리스트 (시간 낭비 방지)
+
+**위젯 탭해도 안 될 때** — 이 순서로:
+1. [ ] boot.log에 최근 `=== widget tap ===` 있나? 없으면 shortcut 미설치 (교훈 6)
+2. [ ] widget_debug.log에 `widget invoked` 있나? 없으면 wrapper 안 실행 (교훈 6)
+3. [ ] `ps -ef | grep termux-toast` stuck 프로세스 있나? (교훈 12)
+4. [ ] boot.log에 `slow path — relay dead` 이후 진행 안 됨? → termux-toast timeout 적용 확인
+
+**재부팅 후 자동 시작 안 될 때** — 이 순서로:
+1. [ ] **우선 10분 이상 대기** (교훈 10 — Samsung 8분 지연)
+2. [ ] `uptime`, `ps -ef | grep termux` — Termux:Boot 이후 실행됐나
+3. [ ] boot.log에 새 "boot started" 있나 — 있으면 boot.sh 실행됨
+4. [ ] `settings get global adb_wifi_enabled` — 0이면 Samsung 리셋 (교훈 11, 14)
+5. [ ] WiFi ADB 의존이 막혔으면 위젯 탭으로 수동 복구 + boot.sh retry loop 대기 (교훈 15)
+
+**Termux 내부 파일 수정 필요 시**:
+1. [ ] A-Team `termux-ctrl-agent` 사용 ([SKILL](../../A-Team/governance/skills/termux-remote/SKILL.md)). ADB 직접 접근 시도 금지 (교훈 6, 9)
+
+**bash `$()` capture 관련 의심 stuck**:
+1. [ ] CMD 안에 `&` 있나 → tempfile 리다이렉트 (교훈 13)
+
 ---
 
 ## 태스크 매핑
@@ -224,7 +426,10 @@ git rm --cached scripts/*.sh && git add scripts/*.sh && git commit -m "fix: enfo
 | BLE/USB HID 디바이스 리매핑 | 교훈 1, 2 |
 | Android 자동화/스크립팅 | 교훈 3, 4 |
 | 루팅 없는 디바이스 제어 | 교훈 5 |
-| 데몬 프로세스 설계 | 교훈 1 (시그널), 7 (이중 fork) |
-| **Termux:Widget 안 됨 진단** | **교훈 6 (먼저 읽고 시간 낭비 막기)** |
+| 데몬 프로세스 설계 | 교훈 1 (시그널), 7 (이중 fork), 15 (retry loop) |
+| **Termux:Widget 안 됨 진단** | **교훈 6 + 12 (termux-toast) + 진단 체크리스트** |
 | Windows에서 Android 스크립트 푸시 | 교훈 8 (CRLF) |
-| Termux 디렉토리 ADB로 만지기 | 교훈 9 (절대 안 됨) |
+| Termux 디렉토리 ADB로 만지기 | 교훈 9 (절대 안 됨) + A-Team agent |
+| **재부팅 후 자동 시작 의심** | **교훈 10 (8분 대기 우선), 14 (WiFi ADB Samsung 한계), 15 (retry loop)** |
+| Termux 유저 권한 명령 실패 | 교훈 11 (settings put INTERACT_ACROSS_USERS) |
+| agent/script stuck 디버깅 | 교훈 13 ($() capture block) |
