@@ -18,14 +18,14 @@ sleep 1.5
 if [ ! -f "$CMD" ]; then
     # relay가 cmd를 처리하고 삭제함 = 살아있음
     echo "$(date): fast path — cmd consumed" >> "$LOG"
-    termux-toast "T33A 재시작 중"
+    timeout 3 termux-toast "T33A 재시작 중"
     exit 0
 fi
 
 # ── Slow path: cmd 안 사라짐 = relay 죽음, ADB로 재기동 ──
 rm -f "$CMD"
 echo "$(date): slow path — relay dead" >> "$LOG"
-termux-toast "T33A: 초기화 중..."
+timeout 3 termux-toast "T33A: 초기화 중..."
 
 /system/bin/settings put global adb_wifi_enabled 1 2>/dev/null
 
@@ -63,7 +63,7 @@ if ! $connected; then
 fi
 
 if ! $connected; then
-    termux-toast "T33A: ADB 연결 실패"
+    timeout 3 termux-toast "T33A: ADB 연결 실패"
     echo "$(date): FAILED" >> "$LOG"
     exit 1
 fi
@@ -74,5 +74,5 @@ adb -s localhost:$PORT shell \
 echo "$(date): old relay killed, new relay started" >> "$LOG"
 sleep 2
 
-termux-toast "T33A 재시작됨"
+timeout 3 termux-toast "T33A 재시작됨"
 echo "$(date): done" >> "$LOG"
