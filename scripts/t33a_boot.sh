@@ -35,29 +35,43 @@ sleep 25
 adb kill-server >> "$LOG" 2>&1; sleep 1
 adb start-server >> "$LOG" 2>&1; sleep 2
 
-connected=false
-for i in $(seq 1 20); do
-    PORT=$(getprop service.adb.tls.port 2>/dev/null)
-    [ -z "$PORT" ] || [ "$PORT" = "0" ] && PORT=$(getprop service.adb.tcp.port 2>/dev/null)
-    [ -z "$PORT" ] || [ "$PORT" = "0" ] && PORT=5555
-    result=$(adb connect localhost:$PORT 2>&1)
-    echo "$(date): connect #$i (port=$PORT): $result" >> "$LOG"
-    if echo "$result" | grep -q "connected"; then
-        connected=true
-        break
-    fi
-    sleep 5
-done
-
-if ! $connected; then
-    echo "$(date): FATAL — ADB connect failed" >> "$LOG"
-    exit 1
-fi
-
-adb -s localhost:$PORT shell echo ok >> "$LOG" 2>&1 || {
-    echo "$(date): FATAL — ADB shell failed" >> "$LOG"
-    exit 1
+connect_adb() {
+    connected=false
+    for i in $(seq 1 20); do
+        PORT=$(getprop service.adb.tls.port 2>/dev/null)
+        [ -z "$PORT" ] || [ "$PORT" = "0" ] && PORT=$(getprop service.adb.tcp.port 2>/dev/null)
+        [ -z "$PORT" ] || [ "$PORT" = "0" ] && PORT=5555
+        result=$(adb connect localhost:$PORT 2>&1)
+        echo "$(date): connect #$i (port=$PORT): $result" >> "$LOG"
+        if echo "$result" | grep -q "connected"; then
+            if adb -s localhost:$PORT shell echo ok > /dev/null 2>&1; then
+                connected=true
+                break
+            fi
+        fi
+        sleep 5
+    done
+    $connected
 }
+
+# 초기 연결 시도
+if ! connect_adb; then
+    # FATAL 대신: wake-lock 유지하면서 주기적 재시도
+    # Samsung이 재부팅마다 adb_wifi_enabled=0으로 리셋 → settings put 실패 → ADB 연결 실패 가능
+    # 이때 boot.sh가 죽으면 재부팅 후 아무것도 자동 복구 안 됨. 그래서 retry loop로 바꿈
+    # 사용자가 위젯 탭, USB 연결, 또는 WiFi ADB 페어링 시 자동 복구
+    echo "$(date): ADB connect failed — entering retry loop (wake-lock 유지)" >> "$LOG"
+    termux-toast "T33A: WiFi ADB 대기 중 (위젯 탭 권장)" 2>/dev/null || true
+    while true; do
+        sleep 60
+        /system/bin/settings put global adb_wifi_enabled 1 2>/dev/null
+        if connect_adb; then
+            echo "$(date): ADB recovered — proceeding" >> "$LOG"
+            termux-toast "T33A: WiFi ADB 복구됨" 2>/dev/null || true
+            break
+        fi
+    done
+fi
 
 # relay 기동 — 이중 fork로 init(PID 1)에 reparent (ADB 세션 종료에도 생존)
 adb -s localhost:$PORT shell \
