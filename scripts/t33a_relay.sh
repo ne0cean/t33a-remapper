@@ -17,7 +17,19 @@ fi
 echo "$$" > "$RELAY_PID"
 trap "" HUP
 
-log() { echo "$(date '+%Y-%m-%d %H:%M:%S') relay: $1" >> "$LOG"; }
+# 로그 로테이션: 1MB 넘으면 마지막 500줄만 유지 (로그 무한 증가 방지)
+rotate_log() {
+    local size=$(stat -c %s "$LOG" 2>/dev/null || echo 0)
+    if [ "$size" -gt 1048576 ]; then
+        tail -500 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+    fi
+}
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') relay: $1" >> "$LOG"
+    # 매 100번째 로그마다 사이즈 체크
+    LOG_TICK=$((${LOG_TICK:-0} + 1))
+    [ $((LOG_TICK % 100)) -eq 0 ] && rotate_log
+}
 log "started (PID $$)"
 
 restart_daemon() {
