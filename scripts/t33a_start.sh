@@ -16,9 +16,20 @@ echo "$(date): === widget tap ===" >> "$LOG"
 echo restart > "$CMD"
 sleep 1.5
 if [ ! -f "$CMD" ]; then
-    # relay가 cmd를 처리하고 삭제함 = 살아있음
+    # relay가 cmd를 처리하고 삭제함 = 살아있음. 데몬 status도 추가 검증.
     echo "$(date): fast path — cmd consumed" >> "$LOG"
-    timeout 3 termux-toast "T33A 재시작 중"
+    sleep 2  # 데몬 재시작·디바이스 grab까지 대기
+    # heartbeat 파일 mtime이 최근(15초 이내)인지로 데몬 살아있음 검증
+    HB_MTIME=$(stat -c %Y /data/local/tmp/t33a.heartbeat 2>/dev/null || echo 0)
+    NOW=$(date +%s)
+    HB_AGE=$((NOW - HB_MTIME))
+    STATE=$(cat /data/local/tmp/t33a.status 2>/dev/null || echo unknown)
+    if [ "$HB_AGE" -le 15 ] 2>/dev/null; then
+        timeout 3 termux-toast "T33A 재시작됨 ($STATE)"
+    else
+        # 데몬이 안 돌아옴 — postmortem 이미 relay가 캡처했음
+        timeout 3 termux-toast "T33A: 데몬 응답 없음 — postmortem 확인"
+    fi
     exit 0
 fi
 

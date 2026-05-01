@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <time.h>
 #include <sys/wait.h>
+#include <sys/select.h>
 #include <sched.h>
 #include <linux/input.h>
 #include <linux/uinput.h>
@@ -15,9 +16,11 @@
 #define PID_FILE    "/data/local/tmp/t33a.pid"
 #define STATUS_FILE "/data/local/tmp/t33a.status"
 #define LOG_FILE    "/sdcard/Download/t33a.log"
+#define HEARTBEAT_FILE "/data/local/tmp/t33a.heartbeat"
 #define RESTART_DELAY 1
 #define CONFIG_FILE "/data/local/tmp/t33a.conf"
 #define LOG_MAX_LINES 200
+#define HEARTBEAT_SEC 60
 
 static volatile int running = 1;
 static volatile pid_t child_pid = 0;
@@ -57,6 +60,19 @@ static void log_event(const char *msg) {
     fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d %s\n",
             t->tm_year+1900, t->tm_mon+1, t->tm_mday,
             t->tm_hour, t->tm_min, t->tm_sec, msg);
+    fclose(f);
+}
+
+/* Touch heartbeat file — last alive timestamp.
+ * Watched by relay; missing heartbeat for >2*HEARTBEAT_SEC = daemon hung. */
+static void heartbeat(const char *state) {
+    FILE *f = fopen(HEARTBEAT_FILE, "w");
+    if (!f) return;
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    fprintf(f, "%04d-%02d-%02d %02d:%02d:%02d %s\n",
+            t->tm_year+1900, t->tm_mon+1, t->tm_mday,
+            t->tm_hour, t->tm_min, t->tm_sec, state);
     fclose(f);
 }
 
@@ -261,24 +277,86 @@ static int run_worker(void) {
         log_event("SCHED_FIFO priority set");
 
     write_status("waiting");
+    heartbeat("started");
     load_config();
     log_event("worker started");
 
+    time_t last_hb = time(NULL);
+    int find_fail_logged = 0;     /* throttle find_device failure log */
+    time_t last_find_fail_log = 0;
+
     while (running) {
         int infd = find_device();
-        if (infd < 0) { usleep(500000); continue; }
+        if (infd < 0) {
+            time_t now = time(NULL);
+            if (now - last_hb >= HEARTBEAT_SEC) {
+                heartbeat("waiting:no_device");
+                last_hb = now;
+            }
+            /* Log find_device failure once per 5 minutes — sustained "T33A invisible" */
+            if (!find_fail_logged || now - last_find_fail_log >= 300) {
+                log_event("warn: T33A device not found in /dev/input — BLE peripheral invisible");
+                find_fail_logged = 1;
+                last_find_fail_log = now;
+            }
+            usleep(500000);
+            continue;
+        }
+        find_fail_logged = 0;  /* reset once we see device again */
 
-        if (ioctl(infd, EVIOCGRAB, 1) < 0) { close(infd); usleep(500000); continue; }
+        if (ioctl(infd, EVIOCGRAB, 1) < 0) {
+            log_event("warn: EVIOCGRAB failed — device busy or vanished");
+            close(infd);
+            usleep(500000);
+            continue;
+        }
 
         int uifd = create_uinput();
-        if (uifd < 0) { ioctl(infd, EVIOCGRAB, 0); close(infd); usleep(500000); continue; }
+        if (uifd < 0) {
+            log_event("error: create_uinput failed — /dev/uinput permission?");
+            ioctl(infd, EVIOCGRAB, 0);
+            close(infd);
+            usleep(500000);
+            continue;
+        }
 
         write_status("active");
+        heartbeat("active");
+        last_hb = time(NULL);
         log_event("BLE connected — remapping active");
 
-        /* remap loop */
+        /* remap loop with select() — 60s timeout for heartbeat even when idle */
         struct input_event ev;
-        while (running && read(infd, &ev, sizeof(ev)) == sizeof(ev)) {
+        int active_break = 0;
+        while (running && !active_break) {
+            fd_set rfds;
+            FD_ZERO(&rfds);
+            FD_SET(infd, &rfds);
+            struct timeval tv = { .tv_sec = HEARTBEAT_SEC, .tv_usec = 0 };
+            int sret = select(infd + 1, &rfds, NULL, NULL, &tv);
+            if (sret < 0) {
+                if (errno == EINTR) continue;
+                log_event("warn: select() error — breaking remap loop");
+                break;
+            }
+            if (sret == 0) {
+                /* idle timeout — heartbeat */
+                heartbeat("active:idle");
+                last_hb = time(NULL);
+                continue;
+            }
+            ssize_t n = read(infd, &ev, sizeof(ev));
+            if (n != sizeof(ev)) {
+                /* EOF or error — device likely disconnected */
+                if (n < 0) log_event("warn: read() error — device gone");
+                break;
+            }
+            time_t now = time(NULL);
+            if (now - last_hb >= HEARTBEAT_SEC) {
+                heartbeat("active");
+                last_hb = now;
+            }
+
             if (ev.type == EV_MSC && ev.code == MSC_SCAN) {
                 /* Drop MSC_SCAN — stale scan codes (e.g. consumer power 0x000c0030)
                  * confuse Android's InputReader into misidentifying remapped keys */
@@ -310,7 +388,10 @@ static int run_worker(void) {
                     continue;  /* suppress key up — already sent in double_click */
                 }
             }
-            if (write(uifd, &ev, sizeof(ev)) < 0) break;
+            if (write(uifd, &ev, sizeof(ev)) < 0) {
+                log_event("warn: write to uinput failed — breaking remap loop");
+                active_break = 1;
+            }
         }
 
         /* device disconnected — cleanup and retry */
@@ -320,11 +401,14 @@ static int run_worker(void) {
         close(infd);
 
         write_status("waiting");
+        heartbeat("waiting:disconnected");
+        last_hb = time(NULL);
         log_event("BLE disconnected — waiting for reconnect");
         usleep(200000);
     }
 
     write_status("stopped");
+    heartbeat("stopped");
     log_event("worker stopped");
     return 0;
 }
