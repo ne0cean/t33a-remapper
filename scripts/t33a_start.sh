@@ -27,7 +27,8 @@ rm -f "$CMD"
 echo "$(date): slow path — relay dead" >> "$LOG"
 timeout 3 termux-toast "T33A: 초기화 중..."
 
-/system/bin/settings put global adb_wifi_enabled 1 2>/dev/null
+# settings put global adb_wifi_enabled 는 Termux 권한 부족으로 항상 실패 → 호출 안 함
+# (lessons/16 교훈 11/16). 사용자가 무선 디버깅 토글 OFF→ON 해야 listener 살아남.
 
 # ADB 서버는 이미 떠있을 가능성 높음 — kill/start 생략, 바로 connect 시도
 PORT=$(getprop service.adb.tls.port 2>/dev/null)
@@ -63,9 +64,25 @@ if ! $connected; then
 fi
 
 if ! $connected; then
-    timeout 3 termux-toast "T33A: ADB 연결 실패"
-    echo "$(date): FAILED" >> "$LOG"
+    # ADB listener 죽어있음 — 사용자 토글 1회 요청 (deeplink 알림)
+    echo "$(date): FAILED — notifying user" >> "$LOG"
+    if command -v termux-notification >/dev/null 2>&1; then
+        termux-notification \
+            --id t33a_adb \
+            --title "T33A: 무선 디버깅 토글 필요" \
+            --content "설정→개발자 옵션→무선 디버깅 OFF→ON (탭하면 이동)" \
+            --priority high \
+            --action "am start -a android.settings.APPLICATION_DEVELOPMENT_SETTINGS" \
+            2>/dev/null || true
+    else
+        timeout 3 termux-toast "T33A: 무선 디버깅 OFF→ON 1회 필요"
+    fi
     exit 1
+fi
+
+# 연결 성공 — 알림 정리
+if command -v termux-notification-remove >/dev/null 2>&1; then
+    termux-notification-remove t33a_adb 2>/dev/null || true
 fi
 
 # 기존 relay 죽이고 새 relay 띄움 (이중 fork로 PPID=1)

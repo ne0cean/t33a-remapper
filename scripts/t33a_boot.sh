@@ -25,9 +25,9 @@ echo "$(date): boot started" > "$LOG"
 termux-wake-lock
 echo "$(date): wake lock acquired" >> "$LOG"
 
-# WiFi ADB 활성화 (OS 업데이트/재부팅이 리셋할 수 있음)
-/system/bin/settings put global adb_wifi_enabled 1 2>/dev/null
-echo "$(date): adb_wifi_enabled set to 1" >> "$LOG"
+# 주의: settings put global adb_wifi_enabled 는 Termux 유저(u0_a533) 권한으로 실패함.
+# WRITE_SECURE_SETTINGS / INTERACT_ACROSS_USERS 가 필요. 코드에서 시도 자체를 제거 (lessons/16 교훈 16).
+# Samsung은 재부팅마다 무선 디버깅 listener를 죽이므로 사용자 토글 1회가 유일한 해결.
 
 sleep 25
 
@@ -54,22 +54,49 @@ connect_adb() {
     $connected
 }
 
+# 사용자에게 ADB 토글 1회 요청 — deeplink 포함 알림 (한 번만 발사 후 60초 쿨다운)
+notify_adb_toggle() {
+    NOTIFY_FLAG=/data/data/com.termux/files/home/.t33a_notify_ts
+    NOW=$(date +%s)
+    LAST=$(cat "$NOTIFY_FLAG" 2>/dev/null || echo 0)
+    [ $((NOW - LAST)) -lt 60 ] && return  # 60초 안에 또 알리지 않음
+    echo "$NOW" > "$NOTIFY_FLAG"
+    # termux-notification 우선, 없으면 toast
+    if command -v termux-notification >/dev/null 2>&1; then
+        termux-notification \
+            --id t33a_adb \
+            --title "T33A: 무선 디버깅 토글 필요" \
+            --content "설정→개발자 옵션→무선 디버깅 OFF→ON (탭하면 이동)" \
+            --priority high \
+            --action "am start -a android.settings.APPLICATION_DEVELOPMENT_SETTINGS" \
+            2>/dev/null || true
+    else
+        timeout 3 termux-toast "T33A: 무선 디버깅 OFF→ON 1회 필요" 2>/dev/null || true
+    fi
+}
+
+clear_adb_notification() {
+    if command -v termux-notification-remove >/dev/null 2>&1; then
+        termux-notification-remove t33a_adb 2>/dev/null || true
+    fi
+    rm -f /data/data/com.termux/files/home/.t33a_notify_ts
+}
+
 # 초기 연결 시도
 if ! connect_adb; then
-    # FATAL 대신: wake-lock 유지하면서 주기적 재시도
-    # Samsung이 재부팅마다 adb_wifi_enabled=0으로 리셋 → settings put 실패 → ADB 연결 실패 가능
-    # 이때 boot.sh가 죽으면 재부팅 후 아무것도 자동 복구 안 됨. 그래서 retry loop로 바꿈
-    # 사용자가 위젯 탭, USB 연결, 또는 WiFi ADB 페어링 시 자동 복구
-    echo "$(date): ADB connect failed — entering retry loop (wake-lock 유지)" >> "$LOG"
-    termux-toast "T33A: WiFi ADB 대기 중 (위젯 탭 권장)" 2>/dev/null || true
+    # ADB listener가 안 떠있음 — Samsung 재부팅 한계 (lessons/16 교훈 14, 16).
+    # boot.sh는 죽지 않고 retry loop 유지. 사용자가 토글 OFF→ON 하면 다음 60초 안에 자동 복구.
+    echo "$(date): ADB connect failed — notifying user, entering retry loop" >> "$LOG"
+    notify_adb_toggle
     while true; do
         sleep 60
-        /system/bin/settings put global adb_wifi_enabled 1 2>/dev/null
         if connect_adb; then
             echo "$(date): ADB recovered — proceeding" >> "$LOG"
-            termux-toast "T33A: WiFi ADB 복구됨" 2>/dev/null || true
+            clear_adb_notification
+            timeout 3 termux-toast "T33A: 자동 복구됨" 2>/dev/null || true
             break
         fi
+        notify_adb_toggle  # 60초마다 알림 갱신 (쿨다운 내부에서 dedupe)
     done
 fi
 
