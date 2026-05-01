@@ -5,9 +5,9 @@
 # 시작: setsid nohup t33a_relay.sh < /dev/null > /dev/null 2>&1 &
 
 BIN=/data/local/tmp/t33a_remap
-CMD=/sdcard/Download/t33a.cmd  # /sdcard로: Termux와 shell 둘 다 write 가능
+CMD=/sdcard/Download/t33a.cmd
 LOG=/sdcard/Download/t33a.log
-RELAY_PID=/data/local/tmp/t33a_relay.pid
+RELAY_PID=/sdcard/Download/t33a_relay.pid   # /sdcard로 이동: Termux도 write 가능
 HEARTBEAT=/data/local/tmp/t33a.heartbeat
 STATUS=/data/local/tmp/t33a.status
 POSTMORTEM_DIR=/sdcard/Download
