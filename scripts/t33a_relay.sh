@@ -1,10 +1,11 @@
-#!/system/bin/sh
-# T33A Relay — shell유저 상주 프로세스
+#!/data/data/com.termux/files/usr/bin/bash
+# T33A Relay — Termux 유저(u0_a533) 상주 프로세스
+# Termux 유저로 실행 → ADB 연결/해제와 완전히 독립 (Samsung adbd 세션 정리에 안 죽음)
+# t33a_remap 실행만 /system/bin/sh -c 로 shell 유저에 위임 (/dev/input 접근 필요)
 # 역할 1: 위젯 명령 수신 (t33a.cmd 파일 감시)
 # 역할 2: 데몬 watchdog (5초 간격)
-# 시작: setsid nohup t33a_relay.sh < /dev/null > /dev/null 2>&1 &
 
-BIN=/data/local/tmp/t33a_remap
+BIN=/data/data/com.termux/files/home/t33a_remap   # Termux 홈: execute 가능
 CMD=/sdcard/Download/t33a.cmd
 LOG=/sdcard/Download/t33a.log
 RELAY_PID=/sdcard/Download/t33a_relay.pid   # /sdcard로 이동: Termux도 write 가능
@@ -37,13 +38,8 @@ log() {
 log "started (PID $$)"
 
 restart_daemon() {
-    pkill -x t33a_remap 2>/dev/null
-    sleep 1
-    # SIGTERM 후에도 살아있으면 SIGKILL
-    pkill -9 -x t33a_remap 2>/dev/null
-    sleep 1
-    rm -f /data/local/tmp/t33a.pid
-    "$BIN"
+    # t33a_remap은 shell 유저(/dev/input 접근 필요) → /system/bin/sh -c 로 위임
+    /system/bin/sh -c "pkill -x t33a_remap 2>/dev/null; sleep 1; pkill -9 -x t33a_remap 2>/dev/null; sleep 1; rm -f /data/local/tmp/t33a.pid; $BIN"
     sleep 2
 }
 

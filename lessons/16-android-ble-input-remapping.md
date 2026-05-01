@@ -396,6 +396,54 @@ fi
 
 ---
 
+## 교훈 16: WiFi ADB listener 부활은 코드로 불가 — deeplink 알림으로 1회 토글 유도
+
+**현장 사례 (2026-05-01 ~ 05-02)**:
+- 04-30 21:37 폰 재부팅 → Termux:Boot 9분 45초 후 정상 발화 (교훈 10 패턴)
+- boot.sh `settings put global adb_wifi_enabled 1` → Termux 권한 부족으로 실패 (silent, 교훈 11)
+- WiFi ADB listener 안 뜸 → boot.sh retry loop (교훈 15) 진입 → 60초마다 connect 시도
+- **24시간째 모두 "Connection refused"** — 사용자 개입 없이는 영원히 못 깸
+- 그 사이 사용자 위젯 5번 탭 (05-01 13:12~14:15) → 모두 동일한 ADB connect 실패로 무반응
+- 결국 PC USB 연결로 ADB 부활시켜 우회 복구
+
+**핵심 진실**:
+- Samsung은 재부팅마다 무선 디버깅 listener를 OFF로 리셋
+- listener를 켜는 권한(`WRITE_SECURE_SETTINGS`/`INTERACT_ACROSS_USERS`)은 **shell 유저 이상**만 보유
+- **Termux 유저(u0_a533)는 영원히 그 권한 없음** → 코드로 풀 수 없는 한계
+- 결과: 재부팅 후 사용자가 **"개발자 옵션 → 무선 디버깅 토글"** 1회 직접 만지는 것이 유일한 길
+
+**해결 (2026-05-02 채택)**:
+1. **헛된 호출 제거**: `boot.sh`/`start.sh` 의 `settings put global adb_wifi_enabled 1` 라인 삭제. 권한 부족으로 항상 실패하니 로그만 어지럽힘.
+2. **deeplink 알림으로 1회 행동 유도**:
+   ```bash
+   termux-notification \
+       --id t33a_adb \
+       --title "T33A: 무선 디버깅 토글 필요" \
+       --content "설정→개발자 옵션→무선 디버깅 OFF→ON (탭하면 이동)" \
+       --priority high \
+       --action "am start -a android.settings.APPLICATION_DEVELOPMENT_SETTINGS"
+   ```
+   잠금화면 알림 → 사용자 탭 → 개발자 옵션 화면 직행 → 토글 OFF/ON → listener 부활 → boot.sh retry loop 다음 사이클(≤60초)에 자동 복구.
+3. **알림 dedupe**: `~/.t33a_notify_ts` 타임스탬프 파일로 60초 쿨다운. 회수는 `termux-notification-remove t33a_adb`.
+
+**금지**:
+- ❌ Termux에서 `settings put global` 또는 `am broadcast`로 listener 켜려는 모든 시도. 권한 부족 (교훈 11).
+- ❌ `tcpip 5555` (root 필요).
+- ❌ 사용자에게 "토글 1회"를 README나 입으로만 알리기 — 잊혀짐. **알림 deeplink가 동작 시점에 직접 안내해야 함**.
+
+**진단 신호** (이 패턴 보이면 즉시 교훈 16):
+```
+boot.log:
+  connect #N (port=5555): Connection refused  ← 반복
+  ADB connect failed — entering retry loop
+getprop service.adb.tls.port → (빈 값)
+getprop service.adb.tcp.port → (빈 값)
+```
+
+**관련 교훈**: 11 (Termux 권한 부족), 14 (Samsung TLS 한계), 15 (retry loop 죽지 말 것).
+
+---
+
 ## 진단 순서 체크리스트 (시간 낭비 방지)
 
 **위젯 탭해도 안 될 때** — 이 순서로:
@@ -408,8 +456,9 @@ fi
 1. [ ] **우선 10분 이상 대기** (교훈 10 — Samsung 8분 지연)
 2. [ ] `uptime`, `ps -ef | grep termux` — Termux:Boot 이후 실행됐나
 3. [ ] boot.log에 새 "boot started" 있나 — 있으면 boot.sh 실행됨
-4. [ ] `settings get global adb_wifi_enabled` — 0이면 Samsung 리셋 (교훈 11, 14)
-5. [ ] WiFi ADB 의존이 막혔으면 위젯 탭으로 수동 복구 + boot.sh retry loop 대기 (교훈 15)
+4. [ ] `getprop service.adb.tls.port` / `service.adb.tcp.port` — 둘 다 빈 값이면 listener 죽음 (교훈 16)
+5. [ ] boot.log에 `Connection refused` 반복 → **사용자가 개발자 옵션→무선 디버깅 OFF→ON 토글** (교훈 16)
+6. [ ] 토글 후 60초 안에 boot.sh retry loop 자동 복구 — 알림 사라지면 성공 (교훈 15, 16)
 
 **Termux 내부 파일 수정 필요 시**:
 1. [ ] A-Team `termux-ctrl-agent` 사용 ([SKILL](../../A-Team/governance/skills/termux-remote/SKILL.md)). ADB 직접 접근 시도 금지 (교훈 6, 9)
