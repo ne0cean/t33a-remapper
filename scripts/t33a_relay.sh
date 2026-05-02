@@ -1,17 +1,18 @@
 #!/system/bin/sh
-# T33A Relay — shell유저 상주 프로세스
-# 역할 1: 위젯 명령 수신 (t33a.cmd 파일 감시)
-# 역할 2: 데몬 watchdog (5초 간격)
-# 시작: setsid nohup t33a_relay.sh < /dev/null > /dev/null 2>&1 &
+# T33A Relay — shell 유저(uid 2000) 상주 프로세스
+# 시작: ADB로 한번만 (setsid nohup ... &) → PPID=1 → USB/ADB 종료 후에도 영구 생존
+# 역할 1: t33a_remap watchdog (5초 간격)
+# 역할 2: 위젯 명령 수신 (t33a.cmd 파일 감시, 1초)
+# 역할 3: heartbeat staleness 감지 → hung 상태 postmortem + 재시작
 
 BIN=/data/local/tmp/t33a_remap
-CMD=/sdcard/Download/t33a.cmd  # /sdcard로: Termux와 shell 둘 다 write 가능
+CMD=/sdcard/Download/t33a.cmd
 LOG=/sdcard/Download/t33a.log
-RELAY_PID=/data/local/tmp/t33a_relay.pid
+RELAY_PID=/sdcard/Download/t33a_relay.pid   # /sdcard: Termux boot.sh가 읽기 가능
 HEARTBEAT=/data/local/tmp/t33a.heartbeat
 STATUS=/data/local/tmp/t33a.status
 POSTMORTEM_DIR=/sdcard/Download
-HEARTBEAT_STALE_SEC=180   # 3분 이상 heartbeat 없으면 hung 판정 (heartbeat 60s × 3)
+HEARTBEAT_STALE_SEC=180   # heartbeat 60s × 3 = 3분 이상 없으면 hung
 
 # 중복 실행 방지
 if [ -f "$RELAY_PID" ]; then
@@ -21,7 +22,7 @@ fi
 echo "$$" > "$RELAY_PID"
 trap "" HUP
 
-# 로그 로테이션: 1MB 넘으면 마지막 500줄만 유지 (로그 무한 증가 방지)
+# 로그 로테이션: 1MB 넘으면 마지막 500줄만 유지
 rotate_log() {
     local size=$(stat -c %s "$LOG" 2>/dev/null || echo 0)
     if [ "$size" -gt 1048576 ]; then
@@ -30,16 +31,14 @@ rotate_log() {
 }
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') relay: $1" >> "$LOG"
-    # 매 100번째 로그마다 사이즈 체크
     LOG_TICK=$((${LOG_TICK:-0} + 1))
     [ $((LOG_TICK % 100)) -eq 0 ] && rotate_log
 }
-log "started (PID $$)"
+log "started (PID $$, uid=$(id -u))"
 
 restart_daemon() {
     pkill -x t33a_remap 2>/dev/null
     sleep 1
-    # SIGTERM 후에도 살아있으면 SIGKILL
     pkill -9 -x t33a_remap 2>/dev/null
     sleep 1
     rm -f /data/local/tmp/t33a.pid
@@ -47,9 +46,6 @@ restart_daemon() {
     sleep 2
 }
 
-# 데몬 죽음/응답불능 감지 시 진단 데이터 즉시 캡처.
-# 다음 사건 발생 시 진범 식별을 위해 logcat/dmesg/heartbeat/메모리 스냅샷을 보존.
-# 사유: $1 = "dead" | "hung" | "manual"
 capture_postmortem() {
     REASON="$1"
     TS=$(date '+%Y%m%d_%H%M%S')
@@ -94,24 +90,25 @@ capture_postmortem() {
     log "postmortem saved: $PM ($REASON)"
 }
 
-# heartbeat staleness check — 데몬 살아있어도 hung 상태면 잡아냄
 is_heartbeat_stale() {
-    [ ! -f "$HEARTBEAT" ] && return 1   # heartbeat 파일 없으면 (구버전 데몬) skip
+    [ ! -f "$HEARTBEAT" ] && return 1
     local mtime=$(stat -c %Y "$HEARTBEAT" 2>/dev/null || echo 0)
     local now=$(date +%s)
     local age=$((now - mtime))
     [ "$age" -gt "$HEARTBEAT_STALE_SEC" ]
 }
 
+log "starting daemon"
+restart_daemon
+
+log "watchdog loop started"
 tick=0
 hung_postmortem_done=0
 while true; do
-    # 위젯 명령 처리 (1초마다 — 위젯 fast path 응답성)
     if [ -f "$CMD" ]; then
         CMD_VAL=$(cat "$CMD" 2>/dev/null)
         rm -f "$CMD"
         log "widget command [$CMD_VAL] — restarting daemon"
-        # 위젯이 명시적으로 재시작 요청 시에도 직전 상태 보존 (왜 사용자가 탭했는지 단서)
         capture_postmortem "manual"
         restart_daemon
         hung_postmortem_done=0
@@ -119,7 +116,6 @@ while true; do
         continue
     fi
 
-    # watchdog (5초마다 — 데몬 헬스체크)
     if [ $tick -ge 5 ]; then
         PID=$(cat /data/local/tmp/t33a.pid 2>/dev/null)
         if [ -z "$PID" ] || ! kill -0 "$PID" 2>/dev/null; then
@@ -128,8 +124,6 @@ while true; do
             restart_daemon
             hung_postmortem_done=0
         elif is_heartbeat_stale; then
-            # 프로세스는 살아있는데 heartbeat 끊김 = hung 상태 (BLE deadlock 등)
-            # 같은 hung 상태에서 매 5초마다 postmortem 찍지 않도록 1회만
             if [ "$hung_postmortem_done" -eq 0 ]; then
                 log "daemon hung (heartbeat stale) — capturing postmortem then restarting"
                 capture_postmortem "hung"
