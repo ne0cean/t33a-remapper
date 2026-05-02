@@ -21,6 +21,7 @@ if [ -f "$RELAY_PID" ]; then
     kill -0 "$OLD" 2>/dev/null && exit 0
 fi
 echo "$$" > "$RELAY_PID"
+echo "$$" > /data/local/tmp/t33a_relay.pid   # 구버전 boot.sh 호환성
 trap "" HUP
 
 # 로그 로테이션: 1MB 넘으면 마지막 500줄만 유지
