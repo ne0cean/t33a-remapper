@@ -7,3 +7,5 @@ tasks/
 lessons/
 CLAUDE.md
 build/
+# auto_pull 상태 파일 (폰 로컬)
+t33a_last_commit

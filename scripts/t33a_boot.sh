@@ -21,6 +21,7 @@ SHORTCUT_DIR="$HOME/.shortcuts"
 WRAPPER=/sdcard/Download/T33A_wrapper
 ADB=/data/data/com.termux/files/usr/bin/adb
 NOTIFY_FLAG=/sdcard/Download/t33a_notify_ts
+AUTO_PULL="$HOME/t33a-remapper/scripts/t33a_auto_pull.sh"
 
 # ── 자체 설치/업데이트 ─────────────────────────────────────────
 mkdir -p "$BOOT_DIR" "$SHORTCUT_DIR" 2>/dev/null
@@ -32,6 +33,15 @@ mkdir -p "$BOOT_DIR" "$SHORTCUT_DIR" 2>/dev/null
 echo "$(date): boot started (PID $$)" > "$LOG"
 termux-wake-lock
 echo "$(date): wake lock acquired" >> "$LOG"
+
+# ── auto_pull 백그라운드 시작 (GitHub 변경 감지 → 자동 업데이트) ────────
+if [ -f "$AUTO_PULL" ]; then
+    # 이미 실행 중이면 skip
+    if ! pgrep -f "t33a_auto_pull" > /dev/null 2>&1; then
+        bash "$AUTO_PULL" &
+        echo "$(date): auto_pull started (PID $!)" >> "$LOG"
+    fi
+fi
 
 # ── ADB 연결 (USB 우선, WiFi 차선) ────────────────────────────
 ADB_TARGET=""

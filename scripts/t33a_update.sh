@@ -1,26 +1,85 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # T33A 폰-내 업데이트 — USB 없이 배포
-# Mac에서 push → 폰 Termux에서 이 스크립트 실행 (또는 T33A_Update 위젯 탭)
-set -e
+# Mac에서 git push → 폰 Termux에서 이 스크립트 실행 (또는 T33A_Update 위젯)
+# 동작: git pull → 변경 감지 → 필요 시 clang 빌드 → relay 통해 재시작
 
 REPO="$HOME/t33a-remapper"
-BIN="/data/local/tmp/t33a_remap"
+BIN_DST="/data/local/tmp/t33a_remap"
 BIN_SDCARD="/sdcard/Download/t33a_remap"
+SCRIPTS_DST="/sdcard/Download"
 CMD="/sdcard/Download/t33a.cmd"
+LOG="/sdcard/Download/t33a_update.log"
 
-echo "[1/3] git pull..."
+log() { echo "$(date '+%H:%M:%S') $*" | tee -a "$LOG"; }
+
+log "=== t33a update started ==="
+
+# [1] git pull
+if [ ! -d "$REPO/.git" ]; then
+    log "ERROR: 레포 없음 — setup_phone.sh 먼저 실행해야 함: $REPO"
+    exit 1
+fi
 cd "$REPO"
-git pull origin main
 
-echo "[2/3] 컴파일 (clang)..."
-clang -O2 -o "$BIN" src/t33a_remap.c
-chmod +x "$BIN"
-cp "$BIN" "$BIN_SDCARD"  # boot.sh 자동 설치 경로에도 복사
-echo "  빌드 OK: $(ls -lh "$BIN" | awk '{print $5, $9}')"
+BEFORE=$(git rev-parse HEAD 2>/dev/null)
+git fetch origin main 2>&1 | tee -a "$LOG"
+REMOTE=$(git rev-parse origin/main 2>/dev/null)
 
-echo "[3/3] 데몬 재시작 (relay 통해)..."
+if [ "$BEFORE" = "$REMOTE" ]; then
+    log "이미 최신 ($BEFORE) — 강제 재시작만"
+    CHANGED_SRC=0
+    CHANGED_SCRIPTS=1   # 재시작은 항상
+else
+    git reset --hard origin/main 2>&1 | tee -a "$LOG"
+    AFTER=$(git rev-parse HEAD)
+    log "업데이트: $BEFORE → $AFTER"
+
+    # 변경된 파일 확인
+    CHANGED_SRC=$(git diff --name-only "$BEFORE" "$AFTER" 2>/dev/null | grep -c 'src/' || true)
+    CHANGED_SCRIPTS=$(git diff --name-only "$BEFORE" "$AFTER" 2>/dev/null | grep -c 'scripts/' || true)
+    log "변경: src=${CHANGED_SRC} scripts=${CHANGED_SCRIPTS}"
+fi
+
+# [2] C 소스 변경 시 빌드
+if [ "$CHANGED_SRC" -gt 0 ]; then
+    log "빌드 시작 (clang)..."
+    if ! command -v clang > /dev/null 2>&1; then
+        log "ERROR: clang 없음 — pkg install clang 필요"
+        exit 1
+    fi
+
+    # 실행 중인 데몬 정지 (text file busy 방지)
+    pkill -x t33a_remap 2>/dev/null || true
+    sleep 1
+
+    clang -O2 -o "$BIN_DST" "$REPO/src/t33a_remap.c" 2>&1 | tee -a "$LOG"
+    chmod +x "$BIN_DST"
+    cp "$BIN_DST" "$BIN_SDCARD"
+    log "빌드 완료: $(ls -lh "$BIN_DST" | awk '{print $5}')"
+fi
+
+# [3] 스크립트 변경 시 /sdcard/Download로 복사
+if [ "$CHANGED_SCRIPTS" -gt 0 ]; then
+    for f in boot relay start; do
+        src="$REPO/scripts/t33a_${f}.sh"
+        dst="$SCRIPTS_DST/t33a_${f}.sh"
+        [ -f "$src" ] && cp "$src" "$dst" && chmod +x "$dst"
+    done
+    log "스크립트 갱신: boot/relay/start"
+fi
+
+# [4] relay 통해 데몬 재시작
+log "데몬 재시작 (relay cmd)..."
 echo "update" > "$CMD"
 sleep 4
 
 STATUS=$(cat /data/local/tmp/t33a.status 2>/dev/null || echo "unknown")
-echo "완료! 데몬 상태: $STATUS"
+HB_AGE="?"
+if [ -f /data/local/tmp/t33a.heartbeat ]; then
+    MTIME=$(stat -c %Y /data/local/tmp/t33a.heartbeat 2>/dev/null || echo 0)
+    HB_AGE=$(( $(date +%s) - MTIME ))
+fi
+
+log "완료! daemon=${STATUS} heartbeat=${HB_AGE}s ago"
+echo ""
+echo "상태: daemon=${STATUS}  heartbeat age=${HB_AGE}s"

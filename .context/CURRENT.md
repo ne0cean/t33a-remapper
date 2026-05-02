@@ -20,9 +20,15 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 - 없음 — 정상 동작 중. 3버튼 모두 확인 (1번/Enter/H)
 
 ## ⏩ Next Tasks
-1. **배터리 50% 이하 테스트** — 충전 없이 배터리 낮춘 후 화면 꺼짐 상태에서 버튼 동작 확인. t33a.log에서 `low_power=1` 전환 시점과 BLE 끊김 타임스탬프 대조
-2. **재부팅 실시험** — Termux:Boot → boot.sh → ADB localhost:5555 → relay → daemon 자동 복구 체인 검증. Samsung 무선 디버깅 토글 1회 필요 (deeplink 알림이 안내)
-3. **boot.sh 구버전 교체** — 현재 PID 21579 (구버전, ADB 의존 watchdog) 실행 중. 다음 재부팅 시 자동 교체됨. 즉시 교체하려면 폰 Termux에서 `kill 21579; setsid bash /sdcard/Download/t33a_boot.sh &`
+1. **[필수] 폰 최초 설정** — 아직 `~/t33a-remapper` 클론이 없음. Termux에서:
+   ```
+   bash /sdcard/Download/t33a_setup_phone.sh
+   ```
+   이 스크립트가 git clone + clang 설치 + 위젯 숏컷 + 초기 빌드까지 자동 처리.
+2. **[자동] 이후 배포 방법** — Mac/폰 Claude Remote에서 코드 수정 → `git push` → 폰 auto_pull이 5분 내 감지 → `t33a_update.sh` 자동 실행. 즉시 반영하려면 `T33A_Update` 위젯 탭.
+3. **배터리 50% 이하 테스트** — 충전 없이 배터리 낮춘 후 화면 꺼짐 상태에서 버튼 동작 확인. t33a.log에서 `low_power=1` 전환 시점과 BLE 끊김 타임스탬프 대조
+4. **재부팅 실시험** — Termux:Boot → boot.sh → ADB localhost:5555 → relay → daemon 자동 복구 체인 검증. Samsung 무선 디버깅 토글 1회 필요 (deeplink 알림이 안내)
+5. **boot.sh 구버전 교체** — 현재 PID 21579 (구버전, ADB 의존 watchdog) 실행 중. 다음 재부팅 시 자동 교체됨. 즉시 교체하려면 폰 Termux에서 `kill 21579; setsid bash /sdcard/Download/t33a_boot.sh &`
 
 ## 🚧 Blockers
 - `~/.termux/boot/` 및 `~/.shortcuts/` 접근/수정은 **Android 14+ 데이터 격리로 ADB 완전 차단**. Termux 내부 실행 필수.
@@ -41,6 +47,7 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 8. **Termux 유저는 shell 유저의 `/proc/PID`를 볼 수 없음** — `boot.sh` watchdog에서 PID 존재 확인 시 `/proc` 대신 heartbeat 파일(`t33a.heartbeat`)의 수정 시간을 사용해야 함.
 
 ## 📝 Recent Activity
+- **2026-05-03 (01:30 KST)**: **무선 배포 파이프라인 구축** — 이제부터 USB 없이 배포 가능. (1) `t33a_update.sh` 개선: git pull → 변경된 파일만 빌드/배포, text file busy 방지, heartbeat 상태 출력. (2) `t33a_auto_pull.sh` 신규: 5분마다 GitHub fetch → 새 커밋 감지 시 자동 update. (3) `t33a_boot.sh`에 auto_pull 백그라운드 시작 통합. (4) `t33a_setup_phone.sh` 개선: 패키지 설치+클론+빌드+위젯까지 원클릭. 이제 흐름: Claude Remote에서 코드 수정 → git push → 폰이 5분 내 자동 반영.
 - **2026-05-03 (01:00 KST)**: **배터리/절전 상태 로그 셋업 + relay dead 루프 픽스**. (1) relay.sh에 5분마다 배터리%, low_power, heartbeat 상태 기록 추가 — 절전 모드 전환 시점 추적 가능. (2) t33a_remap.c에 BLE 재연결 소요시간 로그 추가 (disconnected→reconnected Ns). (3) relay가 PID를 `/sdcard/Download/`와 `/data/local/tmp/` 두 곳에 기록 — 구버전 boot.sh watchdog이 `/data/local/tmp`만 보던 문제로 36초마다 "relay dead" 루프 발생했던 것 완전 해결. 3버튼 동작 최종 확인 (1번/Enter/H).
 - **2026-05-03 (00:20 KST)**: **폰 독립 실행(Standalone) 및 1번 버튼 미작동 해결**.
   - **원인 1**: Samsung 절전 모드(`low_power=1`)가 BLE 입력을 차단함. `low_power=0`으로 해결.
