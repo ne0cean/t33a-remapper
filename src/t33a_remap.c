@@ -169,7 +169,7 @@ static void emit_double_click(int uifd, int key_code) {
     emit_event(uifd, EV_KEY, key_code, 0);
     emit_event(uifd, EV_SYN, SYN_REPORT, 0);
     /* Short gap between clicks */
-    usleep(8000);   /* 8ms — safer gap for Android double-tap recognition */
+    usleep(100000); /* 100ms — 8ms was too short, Android drops both events */
     /* Second click: press + release */
     emit_event(uifd, EV_KEY, key_code, 1);
     emit_event(uifd, EV_SYN, SYN_REPORT, 0);
