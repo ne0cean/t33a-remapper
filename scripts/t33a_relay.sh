@@ -13,6 +13,7 @@ HEARTBEAT=/data/local/tmp/t33a.heartbeat
 STATUS=/data/local/tmp/t33a.status
 POSTMORTEM_DIR=/sdcard/Download
 HEARTBEAT_STALE_SEC=180   # heartbeat 60s × 3 = 3분 이상 없으면 hung
+BATTERY_LOG_INTERVAL=300  # 5분마다 배터리/절전 상태 로그
 
 # 중복 실행 방지
 if [ -f "$RELAY_PID" ]; then
@@ -90,6 +91,19 @@ capture_postmortem() {
     log "postmortem saved: $PM ($REASON)"
 }
 
+# 배터리/절전/BLE 상태 스냅샷 — 문제 발생 시 원인 추적용
+log_power_state() {
+    local tag="${1:-periodic}"
+    local batt=$(dumpsys battery 2>/dev/null | grep ' level:' | tr -d ' ' | cut -d: -f2)
+    local low=$(settings get global low_power 2>/dev/null)
+    local status=$(cat "$STATUS" 2>/dev/null | tr -d '\n' || echo unknown)
+    local hb=$(cat "$HEARTBEAT" 2>/dev/null | tr -d '\n' || echo none)
+    log "power[$tag] battery=${batt}% low_power=${low} daemon=${status} heartbeat=${hb}"
+}
+
+# heartbeat 상태 변화 감지용 이전 값 추적
+LAST_HB_STATE=""
+
 is_heartbeat_stale() {
     [ ! -f "$HEARTBEAT" ] && return 1
     local mtime=$(stat -c %Y "$HEARTBEAT" 2>/dev/null || echo 0)
@@ -99,10 +113,12 @@ is_heartbeat_stale() {
 }
 
 log "starting daemon"
+log_power_state "startup"
 restart_daemon
 
 log "watchdog loop started"
 tick=0
+battery_tick=0
 hung_postmortem_done=0
 while true; do
     if [ -f "$CMD" ]; then
@@ -120,20 +136,35 @@ while true; do
         PID=$(cat /data/local/tmp/t33a.pid 2>/dev/null)
         if [ -z "$PID" ] || ! kill -0 "$PID" 2>/dev/null; then
             log "daemon dead — capturing postmortem then restarting"
+            log_power_state "daemon_dead"
             capture_postmortem "dead"
             restart_daemon
             hung_postmortem_done=0
         elif is_heartbeat_stale; then
             if [ "$hung_postmortem_done" -eq 0 ]; then
                 log "daemon hung (heartbeat stale) — capturing postmortem then restarting"
+                log_power_state "daemon_hung"
                 capture_postmortem "hung"
                 restart_daemon
                 hung_postmortem_done=1
             fi
         else
             hung_postmortem_done=0
+            # heartbeat 상태 변화 감지 — BLE 연결/끊김 전환 시 배터리 스냅샷
+            CUR_HB=$(cat "$HEARTBEAT" 2>/dev/null | awk '{print $3}')
+            if [ -n "$CUR_HB" ] && [ "$CUR_HB" != "$LAST_HB_STATE" ]; then
+                log_power_state "hb_change:${LAST_HB_STATE}->${CUR_HB}"
+                LAST_HB_STATE="$CUR_HB"
+            fi
         fi
         tick=0
+    fi
+
+    # 5분마다 배터리/절전 상태 정기 기록
+    battery_tick=$((battery_tick + 1))
+    if [ "$battery_tick" -ge "$BATTERY_LOG_INTERVAL" ]; then
+        log_power_state "periodic"
+        battery_tick=0
     fi
 
     sleep 1

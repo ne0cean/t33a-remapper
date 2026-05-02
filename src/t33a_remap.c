@@ -284,10 +284,12 @@ static int run_worker(void) {
     time_t last_hb = time(NULL);
     int find_fail_logged = 0;     /* throttle find_device failure log */
     time_t last_find_fail_log = 0;
+    time_t disconnected_at = 0;   /* timestamp when BLE last disappeared */
 
     while (running) {
         int infd = find_device();
         if (infd < 0) {
+            if (disconnected_at == 0) disconnected_at = time(NULL);
             time_t now = time(NULL);
             if (now - last_hb >= HEARTBEAT_SEC) {
                 heartbeat("waiting:no_device");
@@ -295,14 +297,25 @@ static int run_worker(void) {
             }
             /* Log find_device failure once per 5 minutes — sustained "T33A invisible" */
             if (!find_fail_logged || now - last_find_fail_log >= 300) {
-                log_event("warn: T33A device not found in /dev/input — BLE peripheral invisible");
+                char msg[96];
+                long wait = (long)(now - disconnected_at);
+                snprintf(msg, sizeof(msg),
+                    "warn: T33A not found in /dev/input — BLE invisible (waiting %lds)", wait);
+                log_event(msg);
                 find_fail_logged = 1;
                 last_find_fail_log = now;
             }
             usleep(500000);
             continue;
         }
-        find_fail_logged = 0;  /* reset once we see device again */
+        /* BLE device appeared — log reconnect latency */
+        if (disconnected_at > 0) {
+            char msg[96];
+            snprintf(msg, sizeof(msg), "BLE reconnected after %lds", (long)(time(NULL) - disconnected_at));
+            log_event(msg);
+            disconnected_at = 0;
+        }
+        find_fail_logged = 0;
 
         if (ioctl(infd, EVIOCGRAB, 1) < 0) {
             log_event("warn: EVIOCGRAB failed — device busy or vanished");
@@ -414,6 +427,7 @@ static int run_worker(void) {
         ioctl(infd, EVIOCGRAB, 0);
         close(infd);
 
+        disconnected_at = time(NULL);
         write_status("waiting");
         heartbeat("waiting:disconnected");
         last_hb = time(NULL);
