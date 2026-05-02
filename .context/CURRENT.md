@@ -17,12 +17,11 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 - **진단 인프라**: 60초 heartbeat (worker select 기반), find_device 실패 명시 로깅, postmortem 캡처(logcat/dmesg/메모리/input devices), start.sh 응답 검증
 
 ## 🛠 Working On
-- 정상 동작 복원 완료 — shell 유저로 데몬+relay 재시작됨 (2026-05-02 08:30 KST)
+- 없음 — 정상 동작 중 (3시간+ 안정 확인, USB 분리 상태에서도 작동)
 
 ## ⏩ Next Tasks
-1. **재부팅 1회 실시험** — Termux:Boot → boot.sh → ADB localhost → relay → daemon 전체 체인 검증
-2. `~/.termux/boot/t33a_boot.sh` 새 버전 설치 — Termux에서 `bash /data/local/tmp/t33a_boot.sh` 1회 실행
-3. `termux-notification` 동작 확인 — `command -v termux-notification` 반환되는지
+1. **재부팅 실시험** — Termux:Boot → boot.sh → ADB localhost:5555 → relay → daemon 자동 복구 체인 검증. Samsung 무선 디버깅 토글 1회 필요 (deeplink 알림이 안내)
+2. **다른 네트워크 환경 테스트** — WiFi 변경 시에도 localhost loopback이 정상 동작하는지 확인
 
 ## 🚧 Blockers
 - `~/.termux/boot/` 및 `~/.shortcuts/` 접근/수정은 **Android 14+ 데이터 격리로 ADB 완전 차단**. Termux 내부 실행 필수.
