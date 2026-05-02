@@ -25,7 +25,8 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 
 ## 🚧 Blockers
 - `~/.termux/boot/` 및 `~/.shortcuts/` 접근/수정은 **Android 14+ 데이터 격리로 ADB 완전 차단**. Termux 내부 실행 필수.
-- **WiFi ADB listener는 Samsung 재부팅 시 영구 OFF**. 사용자가 개발자 옵션 → 무선 디버깅 OFF→ON 토글 1회 필수. 코드로 우회 불가능 (Termux 권한 부족). [lessons/16 교훈 16](../lessons/16-android-ble-input-remapping.md#교훈-16-wifi-adb-listener-부활은-코드로-불가--deeplink-알림으로-1회-토글-유도)
+- **Samsung 절전 모드 (Power Save)**: 배터리 50% 미만 시 블루투스/백그라운드 입력 제한 가능성. `low_power=0` 설정 및 배터리 최적화 해제 필수.
+- **USB 세션 종속성**: PC에서 `adb shell`로 띄운 프로세스는 선 뽑으면 죽음. **반드시 폰 내부(Termux/Widget)에서 띄워야 독립 생존 가능**.
 
 ## 🎓 이번 세션에서 확정된 판단 (다시 안 돌아갈 것)
 
@@ -36,8 +37,14 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 5. **완전 standalone 대신 "재부팅 후 위젯 탭 1회"** 전략 채택 — boot.sh retry loop + wake-lock으로 사용자가 위젯 탭하는 순간 자동 복구. [lessons/16 교훈 15](../lessons/16-android-ble-input-remapping.md#교훈-15-bootsh는-절대-fatal-exit-하지-말-것--retry-loop으로-대체)
 6. **WiFi ADB listener 부활은 코드로 불가** — 사용자가 무선 디버깅 토글 1회 직접 만져야 함. boot.sh/start.sh가 deeplink 알림으로 이 1회를 안내. [lessons/16 교훈 16](../lessons/16-android-ble-input-remapping.md#교훈-16-wifi-adb-listener-부활은-코드로-불가--deeplink-알림으로-1회-토글-유도)
 7. **t33a_remap은 반드시 shell 유저로 실행** — `/dev/input` = `system:input rw-rw----`, `/dev/uinput` = `uhid:uhid rw-rw----`. Termux 유저(u0_a533)는 input/uhid 그룹 미소속. ADB shell(uid=2000)만 가능. **"ADB 의존 제거"는 물리적으로 불가능**.
+8. **Termux 유저는 shell 유저의 `/proc/PID`를 볼 수 없음** — `boot.sh` watchdog에서 PID 존재 확인 시 `/proc` 대신 heartbeat 파일(`t33a.heartbeat`)의 수정 시간을 사용해야 함.
 
 ## 📝 Recent Activity
+- **2026-05-03 (00:20 KST)**: **폰 독립 실행(Standalone) 및 1번 버튼 미작동 해결**.
+  - **원인 1**: Samsung 절전 모드(`low_power=1`)가 BLE 입력을 차단함. `low_power=0`으로 해결.
+  - **원인 2**: `boot.sh`의 relay 감시 로직 결함. Termux 유저가 shell 유저의 `/proc/PID`를 볼 수 없어 항상 "죽음"으로 오판 → PC 연결 없이는 재기동 실패. heartbeat 파일 나이(`stat -c %Y`) 기반으로 감시 로직 수정.
+  - **원인 3**: PC에서 실행한 ADB 세션은 선 뽑으면 함께 종료됨. `setsid`를 폰 내부(Termux `boot.sh`/`start.sh`)에서 호출해야만 선과 무관하게 독립 생존함.
+  - **데몬 업데이트**: 디버깅을 위해 모든 키 입력을 `t33a.log`에 남기는 verbose 모드 빌드/배포. 더블클릭 딜레이 100ms → 120ms 상향.
 - **2026-05-02 (오전 3차)**: **ADB 의존 제거 리팩토링 롤백**. 다른 에이전트가 수행한 commit 1fea4c4 "ADB 의존 완전 제거"가 근본 원인. t33a_remap을 Termux 유저(u0_a533)로 직접 실행 → /dev/input 권한 없어 find_device() 영원히 실패 → boot.sh watchdog이 10초마다 재시작 → 좀비 30개 누적. 스크립트를 c75e6d6(boot/start) + 61aa481(relay) 버전으로 복원. ADB push로 폰에 직접 배포. shell 유저로 데몬(PID 5615) + relay(PID 5828) 정상 가동 확인.
 - **2026-05-02 (오전 2차)**: **진단 인프라 4종 추가** — 사용자 지적("재부팅 안 했는데 미작동")으로 분석 재출발. (1) worker read 루프를 `select()` 60초 타임아웃 기반으로 바꾸고 heartbeat 파일(`/data/local/tmp/t33a.heartbeat`) 매분 갱신 — 데몬 hung 상태 명시 감지 가능. (2) find_device 실패 시 명시 로깅 (5분 throttle) — "T33A 안 보임" 사각지대 제거. (3) relay에 postmortem 캡처 추가 — 데몬 dead/hung/manual 시 logcat·dmesg·메모리·input devices·heartbeat·process tree를 `/sdcard/Download/t33a_postmortem_<TS>_<reason>.log` 별도 파일로 보존. (4) start.sh fast path가 heartbeat mtime + status 파일까지 검증해 위젯 반응 신뢰성 보장. 즉시 검증 결과: postmortem이 BLE peripheral 미가시 + bluetooth pause/resume cycle을 정확히 캡처 → 다음 사건 발생 시 진범 확실 식별 가능.
 - **2026-05-02**: 어제 1시10분(13:12 KST) 위젯 5번 탭 무반응 사건 완전 진단 + 픽스. 원인 = 04-30 재부팅 후 Samsung WiFi ADB listener 사망 → boot.sh의 `settings put global adb_wifi_enabled 1` 호출이 Termux 권한 부족으로 silent 실패 → 24h 동안 retry loop이 영원히 connect refused → 위젯도 같은 ADB 의존이라 동일 실패. 픽스: (1) 헛된 `settings put` 호출 boot.sh/start.sh에서 제거 (2) ADB 실패 시 `termux-notification` deeplink 알림으로 사용자 무선 디버깅 토글 OFF→ON 안내 (3) 60초 쿨다운 dedupe (4) 토글 후 retry loop 다음 사이클에 자동 복구. lessons/16 교훈 16 추가, 진단 체크리스트 갱신.

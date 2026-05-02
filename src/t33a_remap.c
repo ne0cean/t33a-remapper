@@ -169,7 +169,7 @@ static void emit_double_click(int uifd, int key_code) {
     emit_event(uifd, EV_KEY, key_code, 0);
     emit_event(uifd, EV_SYN, SYN_REPORT, 0);
     /* Short gap between clicks */
-    usleep(100000); /* 100ms — 8ms was too short, Android drops both events */
+    usleep(120000); /* 120ms — 8ms was too short, Android drops both events */
     /* Second click: press + release */
     emit_event(uifd, EV_KEY, key_code, 1);
     emit_event(uifd, EV_SYN, SYN_REPORT, 0);
@@ -180,7 +180,7 @@ static void emit_double_click(int uifd, int key_code) {
 static int find_device(void) {
     char path[64], name[256];
     int fd;
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 64; i++) {
         snprintf(path, sizeof(path), "/dev/input/event%d", i);
         fd = open(path, O_RDONLY);
         if (fd < 0) continue;
@@ -364,15 +364,28 @@ static int run_worker(void) {
             }
             if (ev.type == EV_KEY) {
                 int orig_code = ev.code;
+                char key_log[128];
+                snprintf(key_log, sizeof(key_log), "key received: %d (value %d)", orig_code, ev.value);
+                log_event(key_log);
+
                 /* Tap mapping: inject screen touch instead of key */
                 mapping_t *tap_map = find_tap(orig_code);
                 if (tap_map) {
-                    if (ev.value == 1) emit_tap(tap_map->tap_x, tap_map->tap_y);
+                    if (ev.value == 1) {
+                        log_event("action: tap mapping triggered");
+                        emit_tap(tap_map->tap_x, tap_map->tap_y);
+                    }
                     continue;  /* suppress key up too */
                 }
                 ev.code = remap_key(orig_code);
+                if (ev.code != orig_code) {
+                    snprintf(key_log, sizeof(key_log), "action: remapped %d -> %d", orig_code, ev.code);
+                    log_event(key_log);
+                }
+
                 /* Wakeup: emit KEY_WAKEUP before key to counteract power-key screen-off */
                 if (is_wakeup(orig_code) && ev.value == 1) {
+                    log_event("action: wakeup mapping triggered");
                     emit_event(uifd, EV_KEY, KEY_WAKEUP, 1);
                     emit_event(uifd, EV_SYN, SYN_REPORT, 0);
                     emit_event(uifd, EV_KEY, KEY_WAKEUP, 0);
@@ -381,6 +394,7 @@ static int run_worker(void) {
                 }
                 /* Double-click: on key down, emit two full clicks and suppress further events */
                 if (is_double_click(orig_code) && ev.value == 1) {
+                    log_event("action: double-click mapping triggered");
                     emit_double_click(uifd, ev.code);
                     continue;  /* skip original down event */
                 }

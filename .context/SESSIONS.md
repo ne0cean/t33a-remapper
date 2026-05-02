@@ -5,6 +5,26 @@
 
 ---
 
+## [2026-05-03] (Mac / Claude Code) - [PC 독립 실행(Standalone) 및 1번 버튼 미작동 해결]
+
+**완료**:
+- **절전 모드(Power Save) 차단** — 배터리 50% 미만 시 Samsung이 BLE 입력을 제한하는 문제 발견. `low_power=0` 설정 및 배터리 최적화 예외 확인.
+- **boot.sh Watchdog 수정** — Termux 유저가 shell 유저의 `/proc/PID`를 볼 수 없는 하드웨어 제약(Permission Denied) 확인. `/proc` 대신 heartbeat 파일의 수정 시간(`stat -c %Y`)을 체크하도록 로직 변경 → PC 없이도 폰 스스로 데몬 생존 여부 판단 가능.
+- **Standalone 구조 확립** — PC에서 실행한 ADB 세션은 선을 뽑으면 종료됨을 명시. 폰 내부(Termux/Widget)에서 `localhost:5555`를 통해 데몬을 띄워야만 케이블 분리 후에도 영구 생존함.
+- **데몬 업데이트(Verbose)** — 버튼 1번(172->2 dbl) 작동 확인을 위해 모든 키 이벤트를 `t33a.log`에 남기도록 수정. 더블클릭 딜레이 120ms로 최적화.
+- **불필요 위젯 정리** — `T33A` 위젯만 남기고 타 프로젝트 위젯 정리 권고.
+
+**이슈**:
+- 사용자 불만("선 빼면 안 된다")의 원인은 PC에서 ADB를 쐈기 때문. 폰 내부 위젯 탭으로 실행 주체를 옮기는 것이 유일한 독립 해결책임을 확정.
+
+**교훈**:
+- Termux 유저는 `/proc`을 통해 타 유저(shell) 프로세스를 감시할 수 없다. 파일 기반 heartbeat가 유일한 대안.
+- Samsung의 절전 모드는 단순 CPU 제한이 아니라 Bluetooth/Input Service까지 건드린다.
+
+**빌드**: ✅ (zig cc aarch64-linux-musl -static, verbose logging 포함)
+
+---
+
 ## [2026-04-14] (Windows / Claude Code) - [Android 격리 우회 + 함정 6종 영구 박음]
 
 **완료**:

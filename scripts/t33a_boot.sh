@@ -86,11 +86,16 @@ notify_adb_needed() {
 start_relay() {
     [ -z "$ADB_TARGET" ] && return 1
 
-    # 이미 살아있으면 skip
-    RPID=$(cat "$RELAY_PID" 2>/dev/null)
-    if [ -n "$RPID" ] && [ -d "/proc/$RPID" ]; then
-        echo "$(date): relay alive (PID $RPID) — skip" >> "$LOG"
-        return 0
+    # 이미 살아있으면 skip (Termux 유저가 shell 유저의 /proc을 볼 수 없으므로 heartbeat 파일로 판정)
+    HB_FILE=/data/local/tmp/t33a.heartbeat
+    if [ -f "$HB_FILE" ]; then
+        MTIME=$(stat -c %Y "$HB_FILE" 2>/dev/null || echo 0)
+        NOW=$(date +%s)
+        AGE=$((NOW - MTIME))
+        if [ "$AGE" -lt 180 ]; then
+            echo "$(date): relay alive (heartbeat age ${AGE}s) — skip" >> "$LOG"
+            return 0
+        fi
     fi
 
     echo "$(date): starting relay via ADB ($ADB_TARGET)" >> "$LOG"
