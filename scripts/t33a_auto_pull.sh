@@ -6,7 +6,8 @@
 REPO="$HOME/t33a-remapper"
 LOG="/sdcard/Download/t33a_boot.log"
 LAST_COMMIT_FILE="/sdcard/Download/t33a_last_commit"
-CHECK_INTERVAL=60    # 1분
+TRIGGER_FILE="/sdcard/Download/t33a_update.trigger"
+CHECK_INTERVAL=60    # 1분 (Mac ADB 트리거 시 즉시)
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') auto_pull: $*" >> "$LOG"; }
 
@@ -22,7 +23,19 @@ while true; do
         continue
     fi
 
-    # fetch (타임아웃 30초)
+    # Mac ADB 즉시 트리거 감지
+    if [ -f "$TRIGGER_FILE" ]; then
+        rm -f "$TRIGGER_FILE"
+        log "즉시 트리거 감지 — 업데이트 시작"
+        bash "$REPO/scripts/t33a_update.sh"
+        REMOTE=$(git -C "$REPO" rev-parse HEAD 2>/dev/null)
+        echo "$REMOTE" > "$LAST_COMMIT_FILE"
+        log "업데이트 완료"
+        sleep "$CHECK_INTERVAL"
+        continue
+    fi
+
+    # 주기적 fetch
     if ! timeout 30 git -C "$REPO" fetch origin main > /dev/null 2>&1; then
         log "fetch 실패 (네트워크 없음?)"
         sleep "$CHECK_INTERVAL"

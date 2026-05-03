@@ -42,6 +42,18 @@ deploy() {
 }
 
 case "${1:-start}" in
+    push)
+        # git push + 폰 즉시 update 트리거
+        # relay의 cmd 파일 감시를 활용: "update" 쓰면 relay가 t33a_update.sh 실행
+        git push origin main
+        ADB_DEV=$(adb devices 2>/dev/null | grep -E 'device$' | grep -v 'List' | awk '{print $1}' | head -1)
+        if [ -n "$ADB_DEV" ]; then
+            adb -s "$ADB_DEV" shell "echo update > /sdcard/Download/t33a_update.trigger"
+            echo "폰 update 트리거 전송 완료"
+        else
+            echo "ADB 없음 — 폰이 1분 내 자동 감지"
+        fi
+        ;;
     start)
         connect
         STATUS=$(adb -s "$PHONE" shell "$BIN status" 2>/dev/null)
