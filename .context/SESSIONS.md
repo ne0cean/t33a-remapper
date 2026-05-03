@@ -5,6 +5,21 @@
 
 ---
 
+## [2026-05-03] (Mac / Claude Code) - 무선 배포 파이프라인 구축
+
+**완료**:
+- `t33a_auto_pull.sh` 신규: 5분마다 GitHub fetch → 새 커밋 감지 시 자동 `t33a_update.sh` 실행
+- `t33a_update.sh` 개선: 변경된 파일만 빌드/배포, text file busy 방지, heartbeat 상태 출력
+- `t33a_boot.sh`: auto_pull 백그라운드 시작 통합
+- `t33a_setup_phone.sh`: 패키지 설치 + git clone + clang + 위젯 숏컷 + 초기 빌드 원클릭
+- 배포 흐름 확정: Claude Remote에서 코드 수정 → `git push` → 폰 5분 내 자동 반영
+
+**이슈**: 폰 Termux에 아직 `~/t33a-remapper` 클론 없음 — `bash /sdcard/Download/t33a_setup_phone.sh` 1회 필요
+
+**빌드**: N/A (셸 스크립트)
+
+---
+
 ## [2026-05-03] (Mac / Claude Code) - [PC 독립 실행(Standalone) 및 1번 버튼 미작동 해결]
 
 **완료**:

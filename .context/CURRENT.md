@@ -13,6 +13,10 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 - start.sh (위젯 invoke, fast path 1초 + heartbeat 검증 + deeplink 알림)
 - 위젯 원샷 리셋 스크립트 (`scripts/t33a_widget_reset.sh`)
 - CRLF 트랩 방지 (`.gitattributes eol=lf`)
+- **무선 배포 파이프라인** (USB 없이 git push → 폰 5분 내 자동 반영)
+  - `t33a_auto_pull.sh`: 5분마다 GitHub fetch, 새 커밋 시 자동 update
+  - `t33a_update.sh`: git pull → src변경 시 clang빌드, scripts변경 시 /sdcard갱신
+  - `t33a_setup_phone.sh`: 폰 최초 설치 원클릭 (git clone + clang + 위젯 + 초기빌드)
 - 이중 fork 생존 패턴 (ADB 분리에도 생존)
 - **진단 인프라**: 60초 heartbeat (worker select 기반), find_device 실패 명시 로깅, postmortem 캡처(logcat/dmesg/메모리/input devices), start.sh 응답 검증
 
