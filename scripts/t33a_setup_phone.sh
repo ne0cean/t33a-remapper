@@ -51,10 +51,12 @@ fi
 # [4] 초기 바이너리 빌드
 echo "[4/4] 초기 빌드 (clang)..."
 mkdir -p /sdcard/Download
-clang -O2 -o /data/local/tmp/t33a_remap "$REPO/src/t33a_remap.c"
-chmod +x /data/local/tmp/t33a_remap
-cp /data/local/tmp/t33a_remap /sdcard/Download/t33a_remap
-echo "  바이너리: $(ls -lh /data/local/tmp/t33a_remap | awk '{print $5}')"
+# /sdcard/Download에 빌드 (Termux 유저 쓰기 가능)
+# /data/local/tmp/t33a_remap은 shell 유저가 실행 중일 수 있어 직접 덮어쓰기 불가
+# → /sdcard/Download에만 두면 boot.sh 자동 설치 로직이 다음 relay 재시작 시 복사
+clang -O2 -o /sdcard/Download/t33a_remap "$REPO/src/t33a_remap.c"
+chmod +x /sdcard/Download/t33a_remap
+echo "  바이너리: $(ls -lh /sdcard/Download/t33a_remap | awk '{print $5}')"
 
 # 스크립트 /sdcard/Download에도 복사 (relay/boot가 거기서 읽음)
 for f in boot relay start; do
