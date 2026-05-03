@@ -6,7 +6,7 @@
 REPO="$HOME/t33a-remapper"
 LOG="/sdcard/Download/t33a_boot.log"
 LAST_COMMIT_FILE="/sdcard/Download/t33a_last_commit"
-CHECK_INTERVAL=300   # 5분
+CHECK_INTERVAL=60    # 1분
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') auto_pull: $*" >> "$LOG"; }
 
