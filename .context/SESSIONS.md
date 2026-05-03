@@ -5,6 +5,20 @@
 
 ---
 
+## [2026-05-03] (Mac / Claude Code) - text file busy 픽스 + 위젯 정리
+
+**완료**:
+- relay.sh: 재시작 시 `/sdcard/Download/t33a_remap` 감지 → 데몬 정지 후 바이너리 교체
+- boot.sh: Termux 유저가 직접 cp 시도하던 로직 제거 (text file busy 원인)
+- `termux_ctrl_restart` 위젯 삭제 (구버전 ctrl-agent용, 현재 불필요)
+- 위젯 2개로 정리: T33A (재시작), T33A_Update (즉시 업데이트)
+
+**이슈**: `~/.shortcuts/` ADB 접근 불가 (Android 14+ 격리) — 삭제는 Termux에서 직접
+
+**빌드**: ✅
+
+---
+
 ## [2026-05-03] (Mac / Claude Code) - 즉시 트리거 배포 완성
 
 **완료**:
