@@ -39,10 +39,19 @@ log() {
 log "started (PID $$, uid=$(id -u))"
 
 restart_daemon() {
-    pkill -x t33a_remap 2>/dev/null
-    sleep 1
-    pkill -9 -x t33a_remap 2>/dev/null
-    sleep 1
+    # /sdcard/Download에 새 바이너리가 있으면 교체 (boot.sh/update.sh가 거기에 빌드)
+    BIN_SRC=/sdcard/Download/t33a_remap
+    if [ -f "$BIN_SRC" ]; then
+        pkill -x t33a_remap 2>/dev/null; sleep 1; pkill -9 -x t33a_remap 2>/dev/null; sleep 1
+        cp "$BIN_SRC" "$BIN" && chmod +x "$BIN"
+        rm -f "$BIN_SRC"
+        log "binary updated from $BIN_SRC"
+    else
+        pkill -x t33a_remap 2>/dev/null
+        sleep 1
+        pkill -9 -x t33a_remap 2>/dev/null
+        sleep 1
+    fi
     rm -f /data/local/tmp/t33a.pid
     "$BIN"
     sleep 2
