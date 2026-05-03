@@ -24,12 +24,12 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 - 없음 — 정상 동작 중. 3버튼 모두 확인 (1번/Enter/H)
 
 ## ⏩ Next Tasks
-1. **[필수] 폰 최초 설정** — 아직 `~/t33a-remapper` 클론이 없음. Termux에서:
+1. **[필수] 폰에서 boot.sh 시작** — auto_pull 활성화:
    ```
-   bash /sdcard/Download/t33a_setup_phone.sh
+   bash ~/t33a-remapper/scripts/t33a_boot.sh &
    ```
-   이 스크립트가 git clone + clang 설치 + 위젯 숏컷 + 초기 빌드까지 자동 처리.
-2. **[자동] 이후 배포 방법** — Mac/폰 Claude Remote에서 코드 수정 → `git push` → 폰 auto_pull이 5분 내 감지 → `t33a_update.sh` 자동 실행. 즉시 반영하려면 `T33A_Update` 위젯 탭.
+   이후 재부팅부터는 Termux:Boot이 자동 시작.
+2. **[자동] 배포 방법** — Mac에서 `./t33a.sh push` → git push + ADB 즉시 트리거 → 폰 즉시 반영 (복붙 불필요)
 3. **배터리 50% 이하 테스트** — 충전 없이 배터리 낮춘 후 화면 꺼짐 상태에서 버튼 동작 확인. t33a.log에서 `low_power=1` 전환 시점과 BLE 끊김 타임스탬프 대조
 4. **재부팅 실시험** — Termux:Boot → boot.sh → ADB localhost:5555 → relay → daemon 자동 복구 체인 검증. Samsung 무선 디버깅 토글 1회 필요 (deeplink 알림이 안내)
 5. **boot.sh 구버전 교체** — 현재 PID 21579 (구버전, ADB 의존 watchdog) 실행 중. 다음 재부팅 시 자동 교체됨. 즉시 교체하려면 폰 Termux에서 `kill 21579; setsid bash /sdcard/Download/t33a_boot.sh &`

@@ -5,6 +5,21 @@
 
 ---
 
+## [2026-05-03] (Mac / Claude Code) - 즉시 트리거 배포 완성
+
+**완료**:
+- `./t33a.sh push` 신규: git push + ADB로 폰 즉시 update 트리거 (복붙 불필요)
+- `t33a_auto_pull.sh`: trigger 파일 즉시 감지 → `t33a_update.sh` 실행
+- 폴링 주기 5분 → 1분으로 단축
+- 레포 public으로 변경 (curl raw 접근 가능)
+- 폰 setup_phone.sh 설치 완료 (git clone + clang + 위젯)
+
+**이슈**: 폰에서 `boot.sh &` 아직 미실행 — auto_pull 비활성 상태
+
+**빌드**: ✅ (bash -n 문법 검사 통과)
+
+---
+
 ## [2026-05-03] (Mac / Claude Code) - 무선 배포 파이프라인 구축
 
 **완료**:
