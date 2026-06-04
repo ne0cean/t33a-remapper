@@ -19,20 +19,21 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
   - `t33a_setup_phone.sh`: 폰 최초 설치 원클릭 (git clone + clang + 위젯 + 초기빌드)
 - 이중 fork 생존 패턴 (ADB 분리에도 생존)
 - **진단 인프라**: 60초 heartbeat (worker select 기반), find_device 실패 명시 로깅, postmortem 캡처(logcat/dmesg/메모리/input devices), start.sh 응답 검증
+- **스픽 앱 탭 매핑** — KEY_VOLUMEDOWN(114) → tap(533, 2032), 작동 확인
+- **standalone 근본 원인 해결** — `adb tcpip 5555`로 TCP loopback cgroup 확보, relay 생존
 
 ## 🛠 Working On
-- 없음 — 정상 동작 중. 3버튼 모두 확인 (1번/Enter/H)
+- 없음
 
 ## ⏩ Next Tasks
-1. **[필수] 폰에서 boot.sh 시작** — auto_pull 활성화:
+1. **[재부팅 전 필수] `adb tcpip 5555`** — 매 USB 연결 시 실행해야 standalone 유지
+   ```bash
+   adb tcpip 5555
+   # 이후 USB 뽑으면 boot.sh가 localhost:5555로 relay 자동 유지
    ```
-   bash ~/t33a-remapper/scripts/t33a_boot.sh &
-   ```
-   이후 재부팅부터는 Termux:Boot이 자동 시작.
-2. **[자동] 배포 방법** — Mac에서 `./t33a.sh push` → git push + ADB 즉시 트리거 → 폰 즉시 반영 (복붙 불필요)
-3. **배터리 50% 이하 테스트** — 충전 없이 배터리 낮춘 후 화면 꺼짐 상태에서 버튼 동작 확인. t33a.log에서 `low_power=1` 전환 시점과 BLE 끊김 타임스탬프 대조
-4. **재부팅 실시험** — Termux:Boot → boot.sh → ADB localhost:5555 → relay → daemon 자동 복구 체인 검증. Samsung 무선 디버깅 토글 1회 필요 (deeplink 알림이 안내)
-5. **boot.sh 구버전 교체** — 현재 PID 21579 (구버전, ADB 의존 watchdog) 실행 중. 다음 재부팅 시 자동 교체됨. 즉시 교체하려면 폰 Termux에서 `kill 21579; setsid bash /sdcard/Download/t33a_boot.sh &`
+2. **persist 검증** — `adb shell setprop persist.adb.tcp.port 5555` Samsung 재부팅 후 효과 확인
+3. **배터리 50% 이하 테스트** — low_power=1 전환 시 BLE 끊김 여부 확인
+4. **재부팅 실시험** — `adb tcpip 5555` → 재부팅 → boot.sh 자동 복구 체인 검증
 
 ## 🚧 Blockers
 - `~/.termux/boot/` 및 `~/.shortcuts/` 접근/수정은 **Android 14+ 데이터 격리로 ADB 완전 차단**. Termux 내부 실행 필수.
