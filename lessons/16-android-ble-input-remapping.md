@@ -482,3 +482,121 @@ getprop service.adb.tcp.port → (빈 값)
 | **재부팅 후 자동 시작 의심** | **교훈 10 (8분 대기 우선), 14 (WiFi ADB Samsung 한계), 15 (retry loop)** |
 | Termux 유저 권한 명령 실패 | 교훈 11 (settings put INTERACT_ACROSS_USERS) |
 | agent/script stuck 디버깅 | 교훈 13 ($() capture block) |
+| **새 키 매핑 추가** | **교훈 17 (원샷 프로세스)** |
+| **USB 뽑으면 안 됨** | **교훈 18 (cgroup + adb tcpip)** |
+
+---
+
+## 교훈 17 — 새 키 매핑 원샷 프로세스
+
+> 2026-06-04 세션 1시간 삽질 후 확정. 다음엔 이 순서 그대로.
+
+### 사전 조건 (30초)
+
+```bash
+adb shell "echo status=$(cat /data/local/tmp/t33a.status) relay=$(cat /sdcard/Download/t33a_relay.pid) hb=$(cat /data/local/tmp/t33a.heartbeat | awk '{print \$3}')"
+# → status=active relay=<PID> hb=active 이어야 함
+# 아니면 교훈 18로 먼저 살려놓기
+```
+
+### Step 1: 좌표 수집
+
+```bash
+adb shell settings put system pointer_location 1
+# 폰 화면 터치 → 상단에 X,Y 픽셀 좌표 표시됨
+# 좌표 메모
+adb shell settings put system pointer_location 0
+```
+
+### Step 2: 빈 키 코드 확인
+
+데몬이 EVIOCGRAB 중이므로 getevent 직접 불가. 로그로 확인:
+
+```bash
+adb shell "timeout 15 tail -f /sdcard/Download/t33a.log"
+# T33A 버튼 누름 → "key received: XXX" 로그 확인
+```
+
+현재 할당: `172`(1번), `28`(엔터), `116`(H). 이 외 키가 빈 키.
+
+### Step 3: config 추가
+
+```bash
+adb shell cat /data/local/tmp/t33a.conf   # 현재 확인
+adb shell "echo '# 앱명 버튼 (keycode X) -> tap X Y' >> /data/local/tmp/t33a.conf"
+adb shell "echo 'X tap Y Z' >> /data/local/tmp/t33a.conf"
+```
+
+### Step 4: relay cmd로 재시작
+
+```bash
+adb shell "echo restart > /sdcard/Download/t33a.cmd"
+sleep 3
+adb shell "tail -3 /sdcard/Download/t33a.log"
+# → "loaded N mappings from config" 확인
+```
+
+### Step 5: 테스트
+
+```bash
+adb shell "timeout 10 tail -f /sdcard/Download/t33a.log"
+# 버튼 누름 → "action: tap mapping triggered" 확인
+```
+
+**절대 금지**: relay 없이 `t33a_remap fg` 직접 실행. USB 뽑으면 즉사.
+
+---
+
+## 교훈 18 — USB 뽑으면 죽는 이유와 고치는 법
+
+### 원인
+
+`setsid`는 SIGHUP만 막는다. Android adbd는 USB 분리 시 자신의 **cgroup 전체에 SIGKILL**을 보낸다. USB ADB로 시작한 모든 프로세스(relay 포함)가 setsid 여부와 무관하게 죽는다.
+
+```
+USB ADB로 relay 시작 → adbd cgroup 귀속
+USB 분리 → adbd cgroup SIGKILL → relay 즉사
+```
+
+### 해결: adb tcpip 5555
+
+```bash
+# PC USB 연결 중일 때 한 번:
+adb tcpip 5555
+# adbd가 TCP 5555로 전환 — USB 분리 후에도 계속 listen
+# boot.sh가 localhost:5555로 relay 시작 → TCP cgroup → USB 분리 무관
+```
+
+### 세션 시작 체크리스트
+
+```bash
+# 1. TCP 포트 확인
+adb shell getprop service.adb.tcp.port   # → 5555 이어야 함
+
+# 5555 아니면:
+adb tcpip 5555   # USB 연결 중에 실행
+sleep 3
+adb connect 192.168.0.18:5555   # WiFi로 재연결 (IP는 상황에 맞게)
+```
+
+### relay 시작 (올바른 방법)
+
+```bash
+# relay.sh 경유 — TCP cgroup으로 시작됨
+adb shell "setsid /system/bin/sh /sdcard/Download/t33a_relay.sh < /dev/null > /dev/null 2>&1 &"
+sleep 3
+adb shell cat /data/local/tmp/t33a.status   # → active
+```
+
+### 재부팅 후 순서
+
+1. USB 연결
+2. `adb tcpip 5555`
+3. USB 뽑기
+4. 60초 이내 boot.sh가 자동으로 relay 올림
+5. 이후 USB 없이 영구 동작
+
+### 미해결: 재부팅 persist
+
+`adb tcpip 5555`는 재부팅 시 초기화됨.
+`adb shell setprop persist.adb.tcp.port 5555` Samsung 효과 미검증 — 다음 기회에 테스트.
