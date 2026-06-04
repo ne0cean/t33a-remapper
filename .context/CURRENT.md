@@ -26,14 +26,13 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 - 없음
 
 ## ⏩ Next Tasks
-1. **[재부팅 전 필수] `adb tcpip 5555`** — 매 USB 연결 시 실행해야 standalone 유지
+1. **[재부팅 검증 대기]** `settings put global adb_wifi_enabled 1` 설정됨 → 재부팅 후 `service.adb.tls.port`가 자동 5555이면 진정한 standalone 완성. 자연스럽게 재부팅될 때 확인.
    ```bash
-   adb tcpip 5555
-   # 이후 USB 뽑으면 boot.sh가 localhost:5555로 relay 자동 유지
+   # 재부팅 후 확인 명령
+   adb shell getprop service.adb.tls.port   # → 5555이면 성공
+   adb shell cat /data/local/tmp/t33a.status  # → active이면 완전 standalone
    ```
-2. **persist 검증** — `adb shell setprop persist.adb.tcp.port 5555` Samsung 재부팅 후 효과 확인
-3. **배터리 50% 이하 테스트** — low_power=1 전환 시 BLE 끊김 여부 확인
-4. **재부팅 실시험** — `adb tcpip 5555` → 재부팅 → boot.sh 자동 복구 체인 검증
+2. **배터리 50% 이하 테스트** — low_power=1 전환 시 BLE 끊김 여부 확인
 
 ## 🚧 Blockers
 - `~/.termux/boot/` 및 `~/.shortcuts/` 접근/수정은 **Android 14+ 데이터 격리로 ADB 완전 차단**. Termux 내부 실행 필수.
