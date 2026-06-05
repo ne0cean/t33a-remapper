@@ -115,16 +115,20 @@ start_relay() {
     # setsid: 새 세션 → PPID=1로 고아화 → ADB 종료 후에도 생존
     "$ADB" -s "$ADB_TARGET" shell \
         "setsid /system/bin/sh '$RELAY_SCRIPT' < /dev/null > /dev/null 2>&1 &"
-    sleep 3
+    sleep 5
 
+    HB_FILE=/data/local/tmp/t33a.heartbeat
+    MTIME=$(stat -c %Y "$HB_FILE" 2>/dev/null || echo 0)
+    NOW=$(date +%s)
+    AGE=$((NOW - MTIME))
     RPID=$(cat "$RELAY_PID" 2>/dev/null)
-    if [ -n "$RPID" ] && [ -d "/proc/$RPID" ]; then
-        echo "$(date): relay started OK (PID $RPID)" >> "$LOG"
+    if [ "$AGE" -lt 30 ]; then
+        echo "$(date): relay started OK (PID $RPID, heartbeat age ${AGE}s)" >> "$LOG"
         rm -f "$NOTIFY_FLAG"
         return 0
     fi
 
-    echo "$(date): relay start failed" >> "$LOG"
+    echo "$(date): relay start failed (PID $RPID, heartbeat age ${AGE}s)" >> "$LOG"
     return 1
 }
 
@@ -156,11 +160,15 @@ while true; do
 
     if [ "$tick" -ge 60 ]; then
         tick=0
-        RPID=$(cat "$RELAY_PID" 2>/dev/null)
-        if [ -n "$RPID" ] && [ -d "/proc/$RPID" ]; then
-            : # relay alive — no action
+        HB_FILE=/data/local/tmp/t33a.heartbeat
+        MTIME=$(stat -c %Y "$HB_FILE" 2>/dev/null || echo 0)
+        NOW=$(date +%s)
+        AGE=$((NOW - MTIME))
+        if [ "$AGE" -lt 90 ]; then
+            : # heartbeat fresh — relay alive
         else
-            echo "$(date): relay dead (PID $RPID) — restarting" >> "$LOG"
+            RPID=$(cat "$RELAY_PID" 2>/dev/null)
+            echo "$(date): relay dead (heartbeat ${AGE}s, PID $RPID) — restarting" >> "$LOG"
             ADB_TARGET=""
             if connect_adb; then
                 start_relay || notify_adb_needed
