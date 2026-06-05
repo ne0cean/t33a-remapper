@@ -20,19 +20,17 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 - 이중 fork 생존 패턴 (ADB 분리에도 생존)
 - **진단 인프라**: 60초 heartbeat (worker select 기반), find_device 실패 명시 로깅, postmortem 캡처(logcat/dmesg/메모리/input devices), start.sh 응답 검증
 - **스픽 앱 탭 매핑** — KEY_VOLUMEDOWN(114) → tap(533, 2032), 작동 확인
-- **standalone 근본 원인 해결** — `adb tcpip 5555`로 TCP loopback cgroup 확보, relay 생존
+- **KEY_VOLUMEUP(115) → tap(555, 769) 매핑 추가** (2026-06-05)
+- **boot.sh + start.sh /proc 버그 수정** — watchdog + start_relay() 모두 heartbeat age 기반으로 교체 (Termux→shell /proc 불가 문제)
+- **CLAUDE.md 이슈 트리거 테이블 추가** — 상황별 즉시 참조 레슨 + pre-flight 체크리스트
+- ❌ **standalone 불가 확정** — Samsung USB 분리 시 TCP adbd cgroup도 SIGKILL. `adb tcpip 5555` 무효. 시도 금지.
 
 ## 🛠 Working On
 - 없음
 
 ## ⏩ Next Tasks
-1. **[재부팅 검증 대기]** `settings put global adb_wifi_enabled 1` 설정됨 → 재부팅 후 `service.adb.tls.port`가 자동 5555이면 진정한 standalone 완성. 자연스럽게 재부팅될 때 확인.
-   ```bash
-   # 재부팅 후 확인 명령
-   adb shell getprop service.adb.tls.port   # → 5555이면 성공
-   adb shell cat /data/local/tmp/t33a.status  # → active이면 완전 standalone
-   ```
-2. **배터리 50% 이하 테스트** — low_power=1 전환 시 BLE 끊김 여부 확인
+1. **배터리 50% 이하 테스트** — low_power=1 전환 시 BLE 끊김 여부 확인
+2. **새 매핑 작업 시 pre-flight 필수**: `adb shell getprop service.adb.tcp.port` → 5555 확인, daemon=active 확인
 
 ## 🚧 Blockers
 - `~/.termux/boot/` 및 `~/.shortcuts/` 접근/수정은 **Android 14+ 데이터 격리로 ADB 완전 차단**. Termux 내부 실행 필수.

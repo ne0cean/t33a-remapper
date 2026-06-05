@@ -5,6 +5,28 @@
 
 ---
 
+## [2026-06-05] (Mac / Claude Code) - KEY_VOLUMEUP 매핑 + boot.sh /proc 버그 수정
+
+**완료**:
+- KEY_VOLUMEUP(115) → tap(555, 769) 매핑 추가 (getevent로 좌표 포착, t33a.log로 키코드 포착)
+- boot.sh watchdog loop + start_relay() `/proc` 체크 → heartbeat age 기반으로 교체
+  - 원인: Termux(u0_a533)는 shell(uid=2000) /proc 접근 불가 → 항상 "relay dead" 오판, 거짓 알림
+  - watchdog: heartbeat age < 90s = alive / start_relay: age < 30s = 성공
+- start.sh 동일한 /proc 버그 수정
+- CLAUDE.md 이슈 트리거 테이블 추가 (상황→레슨 즉시 참조)
+
+**이슈**:
+- `adb tcpip 5555` 실행 시 adbd 재시작 → 기존 relay 즉사. 매핑 세션 중 standalone 시도하면 오히려 망가짐
+- Samsung USB 분리 standalone 완전 불가 확정. TCP adbd도 USB 분리 시 SIGKILL됨
+
+**교훈**:
+- 키 매핑 pre-flight: `adb shell getprop service.adb.tcp.port` (5555 확인) + daemon=active 확인
+- getevent로 터치 좌표 포착: `getevent -l /dev/input/event6 > /sdcard/Download/touch_events.txt &` → kill 후 cat
+
+**빌드**: ✅ (스크립트 수정, C 바이너리 변경 없음)
+
+---
+
 ## [2026-05-03] (Mac / Claude Code) - text file busy 픽스 + 위젯 정리
 
 **완료**:
