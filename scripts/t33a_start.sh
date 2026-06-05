@@ -77,16 +77,20 @@ rm -f "$RELAY_PID_FILE"
 
 "$ADB" -s "$ADB_TARGET" shell \
     "setsid /system/bin/sh '$RELAY_SCRIPT' < /dev/null > /dev/null 2>&1 &"
-sleep 3
+sleep 5
 
 # 알림 정리
 command -v termux-notification-remove >/dev/null 2>&1 && termux-notification-remove t33a_adb 2>/dev/null || true
 
+HB_FILE=/data/local/tmp/t33a.heartbeat
+MTIME=$(stat -c %Y "$HB_FILE" 2>/dev/null || echo 0)
+NOW=$(date +%s)
+AGE=$((NOW - MTIME))
 RPID=$(cat "$RELAY_PID_FILE" 2>/dev/null)
-if [ -n "$RPID" ] && [ -d "/proc/$RPID" ]; then
-    echo "$(date): relay restarted (PID $RPID)" >> "$LOG"
+if [ "$AGE" -lt 30 ]; then
+    echo "$(date): relay restarted (PID $RPID, heartbeat age ${AGE}s)" >> "$LOG"
     timeout 3 termux-toast "T33A 재시작됨"
 else
-    echo "$(date): relay start uncertain" >> "$LOG"
+    echo "$(date): relay start uncertain (PID $RPID, heartbeat age ${AGE}s)" >> "$LOG"
     timeout 3 termux-toast "T33A 재시작됨 (확인 필요)"
 fi
