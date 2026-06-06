@@ -31,6 +31,8 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
   - 수정: T33A_wrapper를 단순 실행 버전으로 교체 (cleanup 코드 제거)
   - 수정: t33a_start.sh를 /data/local/tmp/ + /sdcard/Download/ 양쪽 배포
 - ⚠️ **standalone 재검증 필요** — 이전 "불가 확정"은 잘못된 테스트 결과 (Mac에서 USB ADB로 relay 직접 시작 → cgroup kill). boot.sh TCP path(localhost:5555)로 올바르게 시작된 relay의 USB 분리 생존 여부는 아직 검증 안 됨.
+- **`/debrief` 스킬 글로벌 등록** (2026-06-06) — `~/.claude/commands/debrief.md`. 복잡한 세션 후 Orient→Extract→Commit→Gate 4단계 자동 정리. `/end` Step 6.74에 트리거 연동.
+- **레슨 2개 MEMORY.md 추가** (2026-06-06): relay_hb stale 첫 재시작 실패 버그, 공유 디렉토리 수정 전 ls 필수
 
 ## 🛠 Working On
 (없음)
@@ -57,6 +59,7 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 8. **Termux 유저는 shell 유저의 `/proc/PID`를 볼 수 없음** — `boot.sh` watchdog에서 PID 존재 확인 시 `/proc` 대신 heartbeat 파일(`t33a.heartbeat`)의 수정 시간을 사용해야 함.
 
 ## 📝 Recent Activity
+- **2026-06-06 (2차)**: **`/debrief` 스킬 구현** — 복잡한 세션 후 학습 추출/정리/Pre-flight Gate 자동화. GitHub 리서치(session-retrospective, dream-skill, clean-up) + 오늘 T33A 교훈 반영. `~/.claude/commands/debrief.md` 글로벌 등록. `/end` Step 6.74 트리거 연동. 레슨 2개 추가: relay_hb stale, 공유 디렉토리 ls.
 - **2026-06-06**: **standalone 구조 복구 + 워치독 강화** (2026-06-06)
   - 원인: 이전 세션에서 Mac에서 USB ADB로 relay 직접 시작 → adbd USB cgroup → USB 분리 시 죽음
   - 수정: relay가 항상 emulator-5554(TCP loopback) 경유로 시작됨 확인. boot.sh connect_adb()가 TCP loopback을 "USB device"로 인식하는 구조 파악
