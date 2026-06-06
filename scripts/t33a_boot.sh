@@ -164,13 +164,6 @@ start_relay_via_rish() {
         return 1
     fi
 
-    if _relay_alive; then
-        MTIME=$(stat -c %Y /data/local/tmp/t33a.heartbeat 2>/dev/null || echo 0)
-        AGE=$(( $(date +%s) - MTIME ))
-        echo "$(date): relay alive (heartbeat age ${AGE}s) — skip rish" >> "$LOG"
-        return 0
-    fi
-
     echo "$(date): starting relay via rish (Shizuku cgroup — USB-independent)" >> "$LOG"
     rm -f "$RELAY_PID"
 
@@ -183,13 +176,6 @@ start_relay_via_rish() {
 # ── ADB 경유 relay 시작 (FALLBACK) ─────────────────────────────
 start_relay() {
     [ -z "$ADB_TARGET" ] && return 1
-
-    if _relay_alive; then
-        MTIME=$(stat -c %Y /data/local/tmp/t33a.heartbeat 2>/dev/null || echo 0)
-        AGE=$(( $(date +%s) - MTIME ))
-        echo "$(date): relay alive (heartbeat age ${AGE}s) — skip ADB" >> "$LOG"
-        return 0
-    fi
 
     echo "$(date): starting relay via ADB ($ADB_TARGET)" >> "$LOG"
     rm -f "$RELAY_PID"
