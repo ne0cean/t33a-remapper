@@ -483,7 +483,7 @@ getprop service.adb.tcp.port → (빈 값)
 | Termux 유저 권한 명령 실패 | 교훈 11 (settings put INTERACT_ACROSS_USERS) |
 | agent/script stuck 디버깅 | 교훈 13 ($() capture block) |
 | **새 키 매핑 추가** | **교훈 17 (원샷 프로세스)** |
-| **USB 뽑으면 안 됨** | **교훈 18 (cgroup + adb tcpip)** |
+| **USB 뽑으면 안 됨** | **교훈 18 (cgroup + adb tcpip) + 교훈 19 (watchdog 속도)** |
 
 ---
 
@@ -591,12 +591,93 @@ adb shell cat /data/local/tmp/t33a.status   # → active
 ### 재부팅 후 순서
 
 1. USB 연결
-2. `adb tcpip 5555`
+2. `adb tcpip 5555` (최초 1회만 — 이후 persist.adb.tcp.port가 유지)
 3. USB 뽑기
-4. 60초 이내 boot.sh가 자동으로 relay 올림
+4. boot.sh가 자동으로 relay 올림 (복구 시간은 교훈 19 참조)
 5. 이후 USB 없이 영구 동작
 
-### 미해결: 재부팅 persist
+### persist.adb.tcp.port=5555 — 검증 완료 (2026-06-06)
 
-`adb tcpip 5555`는 재부팅 시 초기화됨.
-`adb shell setprop persist.adb.tcp.port 5555` Samsung 효과 미검증 — 다음 기회에 테스트.
+```bash
+adb shell getprop persist.adb.tcp.port   # → 5555
+```
+Samsung에서 `persist.adb.tcp.port=5555` 재부팅 후에도 유지됨 **확인**.
+최초 1회 `adb tcpip 5555` 실행 후 두 번 다시 안 해도 됨.
+
+**주의**: relay의 cgroup은 여전히 adbd에 귀속됨 (setsid로 해결 안 됨).
+USB 이벤트 시 adbd 재시작 → cgroup kill → relay 사망 → boot.sh watchdog이 복구.
+복구 소요 시간은 watchdog 버전에 따라 다름 (교훈 19).
+
+---
+
+## 교훈 19 — "USB 뽑으면 안 됨" = watchdog 응답 시간 문제 (2026-06-06)
+
+### 증상
+
+USB 연결 중 → 버튼 정상 작동.
+USB 분리 → 버튼 즉시 작동 안 함 → "standalone 불가"로 오인.
+
+### 진짜 원인: watchdog 복구 시간 150초
+
+relay가 죽는 것은 예상 범위 (교훈 18). 문제는 **얼마나 빨리 살아나느냐**.
+
+| 구 watchdog | 신 watchdog |
+|------------|------------|
+| tick=60 (60초마다 체크) | tick=15 (15초마다 체크) |
+| threshold=90s (90초 무응답 = 사망 판정) | threshold=20s (relay_hb 기준) |
+| 최대 150초 복구 지연 | 최대 35초 복구 |
+| 사용자가 30초 내 포기 → "안 됨" 결론 | 35초 기다리면 자동 복구 |
+
+```
+구 watchdog: USB 분리 → relay 사망 → 최대 150초 → ADB fallback → relay 재시작
+신 watchdog: USB 분리 → relay 사망 → 최대 35초  → ADB fallback → relay 재시작
+```
+
+### relay_hb (relay 자체 heartbeat) — 빠른 감지의 핵심
+
+```
+t33a.heartbeat  = 데몬이 60초마다 갱신 → stale 판정 최대 120s 후
+t33a.relay_hb   = relay.sh가 1초마다 갱신 → stale 판정 최대 20s 후
+```
+
+신 watchdog은 `t33a.relay_hb` 우선 확인 → 없으면 `t33a.heartbeat` 폴백.
+
+### watchdog 버전 확인 방법
+
+```bash
+# 로그에서 복구 타임스탬프 간격 확인
+adb shell "grep 'relay dead\|relay started OK' /sdcard/Download/t33a_boot.log | tail -4"
+# 복구 간격 35s 이내 → 신 watchdog
+# 복구 간격 60-150s → 구 watchdog
+```
+
+### 구 watchdog → 신 watchdog 교체 방법
+
+```bash
+# T33A 위젯 탭 1회 (USB 연결 상태)
+# → t33a_start.sh가 구 boot.sh(PID) kill + 신 boot.sh 즉시 시작
+# → 이후 USB 분리 시 35초 내 자동 복구
+```
+
+**배경**: boot.sh는 Termux:Boot에 의해 부팅 시 1회 실행됨. 파일 업데이트(auto_pull)로 `/sdcard/Download/t33a_boot.sh`는 최신화되어도 **실행 중인 프로세스는 교체 안 됨**. 위젯 탭이 유일한 비재부팅 교체 수단.
+
+### "relay already alive" 스킵 — watchdog 재시작 72초 낭비 제거
+
+신 boot.sh는 시작 직후 relay가 살아있으면 rish(72초) + ADB(60초) 루프를 즉시 스킵:
+
+```bash
+# boot.sh 초기화 코드
+_HB_Q_AGE=$(( $(date +%s) - $(stat -c %Y /data/local/tmp/t33a.relay_hb ...) ))
+if [ "$_HB_Q_AGE" -lt 30 ]; then
+    # relay 살아있음 → watchdog 루프 즉시 진입 (rish/ADB 루프 스킵)
+    RISH_OK=1
+fi
+```
+
+이 코드 없으면: 위젯 탭 → start.sh가 구 watchdog 종료 + 신 watchdog 시작 → 신 watchdog이 relay가 살아있는데도 72s rish 루프 → 60s ADB fallback → watchdog 루프 진입까지 132s 낭비.
+
+### 관련 교훈
+
+- 교훈 18: relay가 죽는 근본 원인 (adbd cgroup SIGKILL)
+- 교훈 15: boot.sh FATAL exit 금지 — watchdog 루프로
+
