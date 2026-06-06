@@ -11,8 +11,13 @@ LOG=/sdcard/Download/t33a_boot.log
 HB_FILE=/data/local/tmp/t33a.heartbeat
 STATUS_FILE=/data/local/tmp/t33a.status
 ADB=/data/data/com.termux/files/usr/bin/adb
+BOOT_DIR="$HOME/.termux/boot"
 RISH_SRC=/sdcard/Download/rish
 RISH="$HOME/rish"   # Termux $HOME = /data/data/com.termux/files/home/ (SELinux 실행 허용)
+# boot.sh 자동 설치 — start.sh가 Termux 유저로 실행되므로 ~/.termux/boot/ 접근 가능
+[ -f /sdcard/Download/t33a_boot.sh ] && mkdir -p "$BOOT_DIR" && \
+    cp /sdcard/Download/t33a_boot.sh "$BOOT_DIR/t33a_boot.sh" && \
+    chmod +x "$BOOT_DIR/t33a_boot.sh" 2>/dev/null || true
 # rish를 $HOME에 설치 (없거나 /sdcard가 더 새것이면)
 if [ -f "$RISH_SRC" ] && { [ ! -f "$RISH" ] || [ "$RISH_SRC" -nt "$RISH" ]; }; then
     cp "$RISH_SRC" "$RISH" && \
