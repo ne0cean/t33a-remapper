@@ -27,6 +27,18 @@ fi
 
 log() { echo "$(date): $1" >> "$LOG"; }
 
+# ── boot.sh watchdog 업그레이드 (구 버전 교체) ─────────────────
+# start.sh는 Termux 유저로 실행 → ~/.termux/boot/ 쓰기 가능 + pgrep 가능
+_OLD_BOOT=$(pgrep -f "t33a_boot.sh" 2>/dev/null | head -1)
+if [ -n "$_OLD_BOOT" ]; then
+    log "watchdog upgrade: killing old (PID $_OLD_BOOT)"
+    kill "$_OLD_BOOT" 2>/dev/null
+    sleep 1
+fi
+nohup bash "$BOOT_DIR/t33a_boot.sh" < /dev/null >> "$LOG" 2>&1 &
+log "new boot.sh watchdog started (PID $!)"
+unset _OLD_BOOT
+
 echo "" >> "$LOG"
 log "=== T33A 위젯 탭 ==="
 

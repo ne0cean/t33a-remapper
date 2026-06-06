@@ -193,36 +193,46 @@ start_relay() {
 }
 
 # ── 초기 시작 ──────────────────────────────────────────────────
-# 1) rish (Shizuku) PRIMARY — 최대 60초 대기 (부팅 후 Shizuku 준비 시간)
-echo "$(date): waiting for Shizuku/rish (max 60s)..." >> "$LOG"
+# relay가 이미 살아있으면 rish/ADB 루프 스킵 (watchdog 재시작 시 즉시 진입)
+_HB_Q=/data/local/tmp/t33a.relay_hb
+[ ! -f "$_HB_Q" ] && _HB_Q=/data/local/tmp/t33a.heartbeat
+_HB_Q_AGE=$(( $(date +%s) - $(stat -c %Y "$_HB_Q" 2>/dev/null || echo 0) ))
 RISH_OK=0
-for i in $(seq 1 12); do
-    if start_relay_via_rish; then
-        echo "$(date): relay up via rish (attempt $i) — USB-independent" >> "$LOG"
-        RISH_OK=1
-        break
-    fi
-    sleep 5
-done
-
-if [ "$RISH_OK" = "0" ]; then
-    # 2) ADB FALLBACK: rish/Shizuku 미동작 시
-    echo "$(date): rish unavailable after 60s, falling back to ADB..." >> "$LOG"
-    for i in $(seq 1 6); do
-        if connect_adb; then
+if [ "$_HB_Q_AGE" -lt 30 ]; then
+    echo "$(date): relay already alive (hb age ${_HB_Q_AGE}s) — skipping startup" >> "$LOG"
+    RISH_OK=1
+else
+    # 1) rish (Shizuku) PRIMARY — 최대 60초 대기 (부팅 후 Shizuku 준비 시간)
+    echo "$(date): waiting for Shizuku/rish (max 60s)..." >> "$LOG"
+    for i in $(seq 1 12); do
+        if start_relay_via_rish; then
+            echo "$(date): relay up via rish (attempt $i) — USB-independent" >> "$LOG"
+            RISH_OK=1
             break
         fi
-        echo "$(date): ADB attempt $i/6 failed, retry in 10s" >> "$LOG"
-        sleep 10
+        sleep 5
     done
 
-    if [ -n "$ADB_TARGET" ]; then
-        start_relay
-    else
-        echo "$(date): ADB unavailable — notifying user" >> "$LOG"
-        notify_adb_needed
+    if [ "$RISH_OK" = "0" ]; then
+        # 2) ADB FALLBACK: rish/Shizuku 미동작 시
+        echo "$(date): rish unavailable after 60s, falling back to ADB..." >> "$LOG"
+        for i in $(seq 1 6); do
+            if connect_adb; then
+                break
+            fi
+            echo "$(date): ADB attempt $i/6 failed, retry in 10s" >> "$LOG"
+            sleep 10
+        done
+
+        if [ -n "$ADB_TARGET" ]; then
+            start_relay
+        else
+            echo "$(date): ADB unavailable — notifying user" >> "$LOG"
+            notify_adb_needed
+        fi
     fi
 fi
+unset _HB_Q _HB_Q_AGE
 
 # ── Termux 상주 watchdog ────────────────────────────────────────
 # relay는 PPID=1이므로 거의 죽지 않음.
