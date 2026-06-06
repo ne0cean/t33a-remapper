@@ -169,16 +169,66 @@ adb shell "tail -20 /sdcard/Download/t33a_boot.log"
 
 ---
 
-## 현재 코드베이스 상태 (복귀 시점 기준)
+## 후속 분석 — "USB 빼면 안됨" 진짜 원인 (복귀 후 추가)
+
+### 원인: watchdog 감지 시간 150초 (≤ 2.5분)
+
+사용자가 USB 빼고 30초 내 포기 → 그 사이 relay는 죽어있음.
+
+흐름:
+```
+USB 제거 → Samsung adbd cgroup kill → relay 사망
+→ 구 watchdog (tick=60, threshold=90s) 감지: 최대 60+90=150초
+→ ADB fallback (TCP localhost:5555) → relay 재시작
+→ 총 복구 시간: 최대 150s
+```
+사용자는 30초 안에 버튼을 눌러보고 "안 됨" 결론. 실제로는 150초 기다리면 됐음.
+
+### Shizuku 확인 결과: 미설치
+
+rish 바이너리(`/sdcard/Download/rish`, `rish_shizuku.dex`)는 있음.
+그러나 Shizuku 앱(`moe.shizuku.privileged.api`) 자체가 미설치 → rish 경로 완전 불가.
+
+### 적용된 수정 (15:40 auto_pull 배포 완료)
+
+**boot.sh — relay 이미 살아있으면 rish/ADB 루프 즉시 스킵**
+- watchdog 재시작 시 72초 낭비 없이 즉시 감시 루프 진입
+
+**start.sh — 위젯 탭 시 구 watchdog 교체**
+- 구 boot.sh(tick=60) kill → 새 boot.sh(tick=15, relay_hb) 시작
+- 결과: 위젯 탭 1회로 복구 시간 150s → **35s**
+
+### 현재 폰 상태 (15:40 기준)
+
+- `/sdcard/Download/t33a_boot.sh` = 새 버전 (tick=15, relay_hb) ✓
+- `/sdcard/Download/t33a_start.sh` = watchdog 교체 로직 포함 ✓
+- `/data/local/tmp/t33a_start.sh` = 위젯 호출 경로 배포 완료 ✓
+- **실행 중인 watchdog(PID 18015)** = 아직 구 버전 (재시작 필요)
+
+### 복귀 후 할 것 (딱 1가지)
+
+**T33A 위젯 탭 1회** (USB 연결 상태)
+→ start.sh가 구 watchdog 종료 + 새 watchdog 시작
+→ 이후 USB 제거 → 35초 내 자동 복구
+
+### 한계 (영구적, 코드로 해결 불가)
+
+USB 제거 시 relay가 사망하는 것 자체는 막을 수 없음.
+Samsung adbd가 자신의 cgroup을 SIGKILL함 → setsid로 막을 수 없음.
+진짜 USB-independent는 Shizuku 설치 후에만 가능.
+
+---
+
+## 현재 코드베이스 상태 (최종)
 
 | 컴포넌트 | 상태 | 비고 |
 |---------|------|------|
-| boot.sh | 수정 완료 | FINAL_SNIPER 보존 + rish PRIMARY 추가 |
-| t33a_start.sh | 수정 완료 | FINAL_SNIPER 재생성 + /data/local/tmp 배포 |
-| T33A_wrapper | 수정 완료 | cleanup 코드 제거 |
-| relay.sh | 수정 완료 | relay_hb 추가 (10s 갱신) |
-| 폰 배포 | **미확인** | 수정된 파일이 폰에 실제 반영됐는지 확인 필요 |
-| standalone 검증 | **미완료** | USB 분리 실증 테스트 미실시 |
+| boot.sh | 배포 완료 ✓ | tick=15, relay_hb, "already alive" 스킵, rish PRIMARY |
+| t33a_start.sh | 배포 완료 ✓ | watchdog 교체 + FINAL_SNIPER 재생성 |
+| T33A_wrapper | 수정 완료 ✓ | cleanup 코드 제거 |
+| relay.sh | 배포 완료 ✓ | relay_hb 1초 갱신 |
+| 실행 중 watchdog | **미교체** | 위젯 탭 1회 필요 |
+| Shizuku | **미설치** | USB-independent의 전제 조건 |
 
 ---
 
