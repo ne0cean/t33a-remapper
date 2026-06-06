@@ -5,6 +5,23 @@
 
 ---
 
+## [2026-06-06] standalone 구조 복구 + 워치독 강화
+
+**완료**:
+- relay가 항상 TCP loopback(emulator-5554) 경유 시작됨 확인 — USB adbd cgroup 아님
+- relay.sh에 relay_hb(매초 갱신) 추가
+- boot.sh 워치독: tick 60→15, 임계값 90s→20s, relay_hb 파일 감시
+- boot.sh에 rish/Shizuku 60초 대기 루프 추가 (primary path)
+- start.sh: 위젯 탭 시 ~/.termux/boot/t33a_boot.sh 자동 설치
+- persist.adb.tcp.port=5555 확인 (재부팅 후 TCP ADB 자동 활성화)
+
+**이슈**:
+- relay ~10분마다 죽음(Samsung adbd kill). boot.sh 워치독이 35s 이내 복구
+- USB 분리 standalone 실증 미완료 — WiFi ADB(192.168.0.18:5555) 접근 불가로 원격 테스트 실패
+
+**빌드**: N/A (스크립트 프로젝트)
+
+
 ## [2026-06-05] (Mac / Claude Code) - KEY_VOLUMEUP 매핑 + boot.sh /proc 버그 수정
 
 **완료**:

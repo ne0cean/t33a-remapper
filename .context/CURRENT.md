@@ -23,6 +23,7 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 - **KEY_VOLUMEUP(115) → tap(555, 769) 매핑 추가** (2026-06-05)
 - **boot.sh + start.sh /proc 버그 수정** — watchdog + start_relay() 모두 heartbeat age 기반으로 교체 (Termux→shell /proc 불가 문제)
 - **CLAUDE.md 이슈 트리거 테이블 추가** — 상황별 즉시 참조 레슨 + pre-flight 체크리스트
+- **standalone 구조 복구 + 워치독 강화** (2026-06-06): relay 항상 TCP loopback(emulator-5554) 경유 시작 확인, relay_hb 추가, boot.sh 워치독 35s 이내 복구, start.sh 위젯에서 boot.sh 자동 설치, persist.adb.tcp.port=5555 확인
 - **FINAL_SNIPER 위젯 완전 복구** (2026-06-06)
   - 원인: T33A_wrapper의 cleanup 코드가 매 부팅 시 FINAL_SNIPER 삭제
   - 원인2: t33a_start.sh가 /data/local/tmp/에 없어서 위젯 탭으로 복구 불가
@@ -32,11 +33,12 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 - ⚠️ **standalone 재검증 필요** — 이전 "불가 확정"은 잘못된 테스트 결과 (Mac에서 USB ADB로 relay 직접 시작 → cgroup kill). boot.sh TCP path(localhost:5555)로 올바르게 시작된 relay의 USB 분리 생존 여부는 아직 검증 안 됨.
 
 ## 🛠 Working On
-- **standalone 키 매핑 테스트**: relay 정상 기동 후 USB 분리 → 키 매핑 동작 확인 (사용자 직접 테스트 필요)
+(없음)
 
 ## ⏩ Next Tasks
-1. **배터리 50% 이하 테스트** — low_power=1 전환 시 BLE 끊김 여부 확인
-2. **새 매핑 작업 시 pre-flight 필수**: `adb shell getprop service.adb.tcp.port` → 5555 확인, daemon=active 확인
+1. **USB 분리 standalone 실증 테스트** — 이론상 OK (TCP 루프백 cgroup). USB 빼고 BLE 버튼 눌러서 확인
+2. **배터리 50% 이하 테스트** — low_power=1 전환 시 BLE 끊김 여부 확인
+3. **새 매핑 작업 시 pre-flight 필수**: `adb shell getprop service.adb.tcp.port` → 5555 확인, daemon=active 확인
 
 ## 🚧 Blockers
 - `~/.termux/boot/` 및 `~/.shortcuts/` 접근/수정은 **Android 14+ 데이터 격리로 ADB 완전 차단**. Termux 내부 실행 필수.
@@ -55,6 +57,15 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 8. **Termux 유저는 shell 유저의 `/proc/PID`를 볼 수 없음** — `boot.sh` watchdog에서 PID 존재 확인 시 `/proc` 대신 heartbeat 파일(`t33a.heartbeat`)의 수정 시간을 사용해야 함.
 
 ## 📝 Recent Activity
+- **2026-06-06**: **standalone 구조 복구 + 워치독 강화** (2026-06-06)
+  - 원인: 이전 세션에서 Mac에서 USB ADB로 relay 직접 시작 → adbd USB cgroup → USB 분리 시 죽음
+  - 수정: relay가 항상 emulator-5554(TCP loopback) 경유로 시작됨 확인. boot.sh connect_adb()가 TCP loopback을 "USB device"로 인식하는 구조 파악
+  - 수정: relay.sh에 relay_hb(매초 갱신) 추가 → boot.sh 워치독 응답 시간 150s→35s
+  - 수정: boot.sh 워치독 tick 60→15, 임계값 90s→20s (relay_hb 기준)
+  - 수정: boot.sh에 rish/Shizuku 60초 대기 루프 추가 (primary path)
+  - 수정: start.sh에서 위젯 탭 시 ~/.termux/boot/t33a_boot.sh 자동 설치
+  - 확인: persist.adb.tcp.port=5555 설정됨 → 재부팅 후에도 TCP ADB 자동 활성화
+  - 확인: relay가 ~10분마다 죽지만(Samsung adbd kill) boot.sh 워치독이 즉시 복구
 - **2026-05-03 (01:30 KST)**: **무선 배포 파이프라인 구축** — 이제부터 USB 없이 배포 가능. (1) `t33a_update.sh` 개선: git pull → 변경된 파일만 빌드/배포, text file busy 방지, heartbeat 상태 출력. (2) `t33a_auto_pull.sh` 신규: 5분마다 GitHub fetch → 새 커밋 감지 시 자동 update. (3) `t33a_boot.sh`에 auto_pull 백그라운드 시작 통합. (4) `t33a_setup_phone.sh` 개선: 패키지 설치+클론+빌드+위젯까지 원클릭. 이제 흐름: Claude Remote에서 코드 수정 → git push → 폰이 5분 내 자동 반영.
 - **2026-05-03 (01:00 KST)**: **배터리/절전 상태 로그 셋업 + relay dead 루프 픽스**. (1) relay.sh에 5분마다 배터리%, low_power, heartbeat 상태 기록 추가 — 절전 모드 전환 시점 추적 가능. (2) t33a_remap.c에 BLE 재연결 소요시간 로그 추가 (disconnected→reconnected Ns). (3) relay가 PID를 `/sdcard/Download/`와 `/data/local/tmp/` 두 곳에 기록 — 구버전 boot.sh watchdog이 `/data/local/tmp`만 보던 문제로 36초마다 "relay dead" 루프 발생했던 것 완전 해결. 3버튼 동작 최종 확인 (1번/Enter/H).
 - **2026-05-03 (00:20 KST)**: **폰 독립 실행(Standalone) 및 1번 버튼 미작동 해결**.
