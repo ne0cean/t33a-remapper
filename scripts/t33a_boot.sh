@@ -137,9 +137,10 @@ _relay_alive() {
 }
 
 _relay_check_start() {
-    # 시작 후 5초 대기 → relay_hb(relay.sh 매초 갱신) 확인
+    # 시작 후 3초 대기 → relay_hb(relay.sh 매초 갱신) 확인
+    # relay_hb는 relay 시작 후 ~1s 내 최초 기록 → 3s면 충분
     # 주의: t33a.heartbeat는 daemon이 60초마다 갱신 → 부팅 직후 항상 stale → 사용 금지
-    sleep 5
+    sleep 3
     HB_FILE=/data/local/tmp/t33a.relay_hb
     [ ! -f "$HB_FILE" ] && HB_FILE=/data/local/tmp/t33a.heartbeat
     MTIME=$(stat -c %Y "$HB_FILE" 2>/dev/null || echo 0)
@@ -171,6 +172,7 @@ start_relay_via_rish() {
     RPID=$(cat "$RELAY_PID" 2>/dev/null)
     [ -n "$RPID" ] && kill "$RPID" 2>/dev/null; sleep 0.5
     rm -f "$RELAY_PID"
+    rm -f /data/local/tmp/t33a.relay_hb  # stale hb 제거
 
     RISH_APPLICATION_ID="com.termux" "$RISH" -c \
         "setsid /system/bin/sh '$RELAY_SCRIPT' < /dev/null > /dev/null 2>&1 &"
@@ -184,6 +186,7 @@ start_relay() {
 
     echo "$(date): starting relay via ADB ($ADB_TARGET)" >> "$LOG"
     rm -f "$RELAY_PID"
+    rm -f /data/local/tmp/t33a.relay_hb  # stale hb 제거 → _relay_check_start 1차 성공 보장
 
     # setsid: 새 세션 → PPID=1로 고아화
     "$ADB" -s "$ADB_TARGET" shell \
