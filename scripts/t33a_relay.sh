@@ -10,6 +10,7 @@ CMD=/sdcard/Download/t33a.cmd
 LOG=/sdcard/Download/t33a.log
 RELAY_PID=/sdcard/Download/t33a_relay.pid   # /sdcard: Termux boot.sh가 읽기 가능
 HEARTBEAT=/data/local/tmp/t33a.heartbeat
+RELAY_HB=/data/local/tmp/t33a.relay_hb      # relay 자체 heartbeat (10s) — boot.sh fast 감지용
 STATUS=/data/local/tmp/t33a.status
 POSTMORTEM_DIR=/sdcard/Download
 HEARTBEAT_STALE_SEC=180   # heartbeat 60s × 3 = 3분 이상 없으면 hung
@@ -169,6 +170,9 @@ while true; do
         fi
         tick=0
     fi
+
+    # 10초마다 relay 자체 heartbeat 갱신 (boot.sh watchdog 빠른 감지용)
+    touch "$RELAY_HB" 2>/dev/null
 
     # 5분마다 배터리/절전 상태 정기 기록
     battery_tick=$((battery_tick + 1))

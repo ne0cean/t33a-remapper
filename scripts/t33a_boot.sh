@@ -188,13 +188,21 @@ start_relay() {
 }
 
 # ── 초기 시작 ──────────────────────────────────────────────────
-# 1) rish (Shizuku) PRIMARY: USB 분리 무관, adbd cgroup 문제 없음
-echo "$(date): trying rish primary path..." >> "$LOG"
-if start_relay_via_rish; then
-    echo "$(date): relay up via rish — USB-independent" >> "$LOG"
-else
+# 1) rish (Shizuku) PRIMARY — 최대 60초 대기 (부팅 후 Shizuku 준비 시간)
+echo "$(date): waiting for Shizuku/rish (max 60s)..." >> "$LOG"
+RISH_OK=0
+for i in $(seq 1 12); do
+    if start_relay_via_rish; then
+        echo "$(date): relay up via rish (attempt $i) — USB-independent" >> "$LOG"
+        RISH_OK=1
+        break
+    fi
+    sleep 5
+done
+
+if [ "$RISH_OK" = "0" ]; then
     # 2) ADB FALLBACK: rish/Shizuku 미동작 시
-    echo "$(date): rish failed, falling back to ADB..." >> "$LOG"
+    echo "$(date): rish unavailable after 60s, falling back to ADB..." >> "$LOG"
     for i in $(seq 1 6); do
         if connect_adb; then
             break
@@ -219,14 +227,16 @@ tick=0
 while true; do
     tick=$((tick + 1))
 
-    if [ "$tick" -ge 60 ]; then
+    if [ "$tick" -ge 15 ]; then
         tick=0
-        HB_FILE=/data/local/tmp/t33a.heartbeat
+        # relay 자체 heartbeat (10s 갱신) — 빠른 감지. 없으면 기존 t33a.heartbeat 폴백
+        HB_FILE=/data/local/tmp/t33a.relay_hb
+        [ ! -f "$HB_FILE" ] && HB_FILE=/data/local/tmp/t33a.heartbeat
         MTIME=$(stat -c %Y "$HB_FILE" 2>/dev/null || echo 0)
         NOW=$(date +%s)
         AGE=$((NOW - MTIME))
-        if [ "$AGE" -lt 90 ]; then
-            : # heartbeat fresh — relay alive
+        if [ "$AGE" -lt 20 ]; then
+            : # relay alive (relay_hb age < 20s)
         else
             RPID=$(cat "$RELAY_PID" 2>/dev/null)
             echo "$(date): relay dead (heartbeat ${AGE}s, PID $RPID) — restarting" >> "$LOG"
