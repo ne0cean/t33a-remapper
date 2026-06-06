@@ -137,19 +137,21 @@ _relay_alive() {
 }
 
 _relay_check_start() {
-    # 시작 후 5초 대기 → heartbeat 30초 이내인지 확인
+    # 시작 후 5초 대기 → relay_hb(relay.sh 매초 갱신) 확인
+    # 주의: t33a.heartbeat는 daemon이 60초마다 갱신 → 부팅 직후 항상 stale → 사용 금지
     sleep 5
-    HB_FILE=/data/local/tmp/t33a.heartbeat
+    HB_FILE=/data/local/tmp/t33a.relay_hb
+    [ ! -f "$HB_FILE" ] && HB_FILE=/data/local/tmp/t33a.heartbeat
     MTIME=$(stat -c %Y "$HB_FILE" 2>/dev/null || echo 0)
     NOW=$(date +%s)
     AGE=$((NOW - MTIME))
     RPID=$(cat "$RELAY_PID" 2>/dev/null)
     if [ "$AGE" -lt 30 ]; then
-        echo "$(date): relay started OK (PID $RPID, heartbeat age ${AGE}s)" >> "$LOG"
+        echo "$(date): relay started OK (PID $RPID, relay_hb age ${AGE}s)" >> "$LOG"
         rm -f "$NOTIFY_FLAG"
         return 0
     fi
-    echo "$(date): relay start failed (PID $RPID, heartbeat age ${AGE}s)" >> "$LOG"
+    echo "$(date): relay start failed (PID $RPID, relay_hb age ${AGE}s)" >> "$LOG"
     return 1
 }
 
@@ -165,6 +167,9 @@ start_relay_via_rish() {
     fi
 
     echo "$(date): starting relay via rish (Shizuku cgroup — USB-independent)" >> "$LOG"
+    # 기존 relay 정리 — 중복 인스턴스 방지 (start.sh와 동일)
+    RPID=$(cat "$RELAY_PID" 2>/dev/null)
+    [ -n "$RPID" ] && kill "$RPID" 2>/dev/null; sleep 0.5
     rm -f "$RELAY_PID"
 
     RISH_APPLICATION_ID="com.termux" "$RISH" -c \
