@@ -22,11 +22,20 @@ WRAPPER=/sdcard/Download/T33A_wrapper
 ADB=/data/data/com.termux/files/usr/bin/adb
 NOTIFY_FLAG=/sdcard/Download/t33a_notify_ts
 AUTO_PULL="$HOME/t33a-remapper/scripts/t33a_auto_pull.sh"
-RISH=/data/local/tmp/rish             # shell 유저가 설치, Termux도 실행 가능
+RISH_SRC=/sdcard/Download/rish
+RISH_DEX_SRC=/sdcard/Download/rish_shizuku.dex
+RISH="$HOME/rish"                    # Termux $HOME = 실행 가능 파티션
 
 # ── 자체 설치/업데이트 ─────────────────────────────────────────
 mkdir -p "$BOOT_DIR" "$SHORTCUT_DIR" 2>/dev/null
 [ -f "$SRC" ] && cp "$SRC" "$BOOT_DIR/t33a_boot.sh" && chmod +x "$BOOT_DIR/t33a_boot.sh"
+# rish를 Termux $HOME에 복사 — /sdcard, /data/local/tmp는 SELinux로 Termux 실행 불가
+if [ -f "$RISH_SRC" ] && [ -f "$RISH_DEX_SRC" ]; then
+    cp "$RISH_SRC" "$RISH" && \
+    cp "$RISH_DEX_SRC" "$HOME/rish_shizuku.dex" && \
+    chmod +x "$RISH" && \
+    echo "$(date): rish installed to \$HOME" >> "$LOG" 2>/dev/null || true
+fi
 # 바이너리 복사는 relay(shell 유저)가 담당 — Termux 유저가 직접 하면 "text file busy"
 # BIN_SRC가 있으면 relay가 다음 watchdog 사이클에 자동 교체
 [ -f "$RELAY_SCRIPT" ] && chmod +x "$RELAY_SCRIPT"

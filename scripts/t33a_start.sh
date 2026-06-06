@@ -11,7 +11,14 @@ LOG=/sdcard/Download/t33a_boot.log
 HB_FILE=/data/local/tmp/t33a.heartbeat
 STATUS_FILE=/data/local/tmp/t33a.status
 ADB=/data/data/com.termux/files/usr/bin/adb
-RISH=/data/local/tmp/rish
+RISH_SRC=/sdcard/Download/rish
+RISH="$HOME/rish"   # Termux $HOME = /data/data/com.termux/files/home/ (SELinux 실행 허용)
+# rish를 $HOME에 설치 (없거나 /sdcard가 더 새것이면)
+if [ -f "$RISH_SRC" ] && { [ ! -f "$RISH" ] || [ "$RISH_SRC" -nt "$RISH" ]; }; then
+    cp "$RISH_SRC" "$RISH" && \
+    cp "/sdcard/Download/rish_shizuku.dex" "$HOME/rish_shizuku.dex" && \
+    chmod +x "$RISH"
+fi
 
 log() { echo "$(date): $1" >> "$LOG"; }
 
@@ -63,7 +70,6 @@ termux-toast "T33A: relay 재시작 중..."
 STARTED=0
 
 # ── 1) rish (Shizuku) — Termux 유저로 실행 → Shizuku cgroup → USB 분리 무관 ──
-log "rish_check: f=$([ -f "$RISH" ] && echo y || echo n) x=$([ -x "$RISH" ] && echo y || echo x) path=$RISH"
 if [ -f "$RISH" ] && [ -x "$RISH" ]; then
     if RISH_APPLICATION_ID="com.termux" "$RISH" -c "echo ok" > /dev/null 2>&1; then
         log "rish available — starting relay via Shizuku cgroup"
