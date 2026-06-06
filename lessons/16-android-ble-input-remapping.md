@@ -681,3 +681,55 @@ fi
 - 교훈 18: relay가 죽는 근본 원인 (adbd cgroup SIGKILL)
 - 교훈 15: boot.sh FATAL exit 금지 — watchdog 루프로
 
+
+---
+
+## 교훈 20 — relay 재시작 1차 시도 항상 실패하던 버그 (2026-06-06)
+
+### 증상
+
+USB 분리 → relay 사망 → watchdog 재시작 시도 2회 필요 → 총 43초 지연.
+로그: `relay start failed (PID XXXX, relay_hb age 44s)` 1회 후 2차에서 성공.
+
+### 원인
+
+relay_hb는 **구 relay가 죽기 직전 마지막으로 쓴 시각**을 그대로 유지.
+새 relay를 시작해도 `_relay_check_start()`는 기존 stale relay_hb를 읽음 → age 40s+ → 실패 판정.
+
+```
+구 relay 사망 (relay_hb 멈춤)
+  ↓ 10-30초 후
+watchdog 감지 → start_relay() 호출
+  relay_hb 삭제 안 함 → 새 relay 시작
+  _relay_check_start() sleep 5s → relay_hb 확인
+  age = 40-50s → 30s 임계값 초과 → "실패" 오판
+  ↓
+15초 후 재시도 → 2차 시도에서 성공
+```
+
+### 수정 (commit: relay 재시작 딜레이 43s→17s)
+
+`start_relay()` 및 `start_relay_via_rish()` 에서 relay 시작 전 relay_hb 삭제:
+```bash
+rm -f /data/local/tmp/t33a.relay_hb  # stale hb 제거 → _relay_check_start 1차 성공 보장
+```
+
+`_relay_check_start()` sleep 5 → 3 (relay_hb는 relay 시작 후 ~1s 내 기록):
+```bash
+sleep 3
+```
+
+### 결과
+
+| | 이전 | 이후 |
+|--|------|------|
+| 감지 | 15s | 15s |
+| 재시작 시도 | 2회 (1차 실패) | 1회 |
+| 확인 sleep | 5s | 3s |
+| **총 복구** | **~43s** | **~19s** |
+
+### 위젯 탭은 40초 대기 불필요
+
+위젯(start.sh)은 boot.sh watchdog과 무관하게 직접 relay 재시작 → **~10초**.
+40초 대기는 USB 분리 후 **watchdog 자동 복구** 시에만 해당.
+
