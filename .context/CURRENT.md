@@ -23,10 +23,16 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 - **KEY_VOLUMEUP(115) → tap(555, 769) 매핑 추가** (2026-06-05)
 - **boot.sh + start.sh /proc 버그 수정** — watchdog + start_relay() 모두 heartbeat age 기반으로 교체 (Termux→shell /proc 불가 문제)
 - **CLAUDE.md 이슈 트리거 테이블 추가** — 상황별 즉시 참조 레슨 + pre-flight 체크리스트
-- ❌ **standalone 불가 확정** — Samsung USB 분리 시 TCP adbd cgroup도 SIGKILL. `adb tcpip 5555` 무효. 시도 금지.
+- **FINAL_SNIPER 위젯 완전 복구** (2026-06-06)
+  - 원인: T33A_wrapper의 cleanup 코드가 매 부팅 시 FINAL_SNIPER 삭제
+  - 원인2: t33a_start.sh가 /data/local/tmp/에 없어서 위젯 탭으로 복구 불가
+  - 수정: boot.sh cleanup 루프에 FINAL_SNIPER 보존, 부팅 시 재생성 코드 추가
+  - 수정: T33A_wrapper를 단순 실행 버전으로 교체 (cleanup 코드 제거)
+  - 수정: t33a_start.sh를 /data/local/tmp/ + /sdcard/Download/ 양쪽 배포
+- ⚠️ **standalone 재검증 필요** — 이전 "불가 확정"은 잘못된 테스트 결과 (Mac에서 USB ADB로 relay 직접 시작 → cgroup kill). boot.sh TCP path(localhost:5555)로 올바르게 시작된 relay의 USB 분리 생존 여부는 아직 검증 안 됨.
 
 ## 🛠 Working On
-- 없음
+- **standalone 키 매핑 테스트**: relay 정상 기동 후 USB 분리 → 키 매핑 동작 확인 (사용자 직접 테스트 필요)
 
 ## ⏩ Next Tasks
 1. **배터리 50% 이하 테스트** — low_power=1 전환 시 BLE 끊김 여부 확인
