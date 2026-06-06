@@ -29,7 +29,30 @@ mkdir -p "$BOOT_DIR" "$SHORTCUT_DIR" 2>/dev/null
 # 바이너리 복사는 relay(shell 유저)가 담당 — Termux 유저가 직접 하면 "text file busy"
 # BIN_SRC가 있으면 relay가 다음 watchdog 사이클에 자동 교체
 [ -f "$RELAY_SCRIPT" ] && chmod +x "$RELAY_SCRIPT"
-[ -f "$WRAPPER" ] && cp "$WRAPPER" "$SHORTCUT_DIR/T33A" && chmod +x "$SHORTCUT_DIR/T33A"
+# 불필요한 위젯 정리 후 T33A 1개만 설치
+if [ -f "$WRAPPER" ]; then
+    ls "$SHORTCUT_DIR/" 2>/dev/null | while read f; do
+        [ "$f" = "T33A" ] && continue
+        [ "$f" = "FINAL_SNIPER" ] && continue  # HSC 위젯 보존
+        rm -f "$SHORTCUT_DIR/$f"
+        echo "$(date): removed shortcut: $f" >> "$LOG"
+    done
+    cp "$WRAPPER" "$SHORTCUT_DIR/T33A" && chmod +x "$SHORTCUT_DIR/T33A"
+fi
+
+# FINAL_SNIPER 항상 보장 (HSC 프로젝트 위젯 — 부팅 시 삭제 방지)
+_SNIPER="$SHORTCUT_DIR/FINAL_SNIPER"
+if [ ! -f "$_SNIPER" ]; then
+    cat > "$_SNIPER" << 'SNIPER_EOF'
+#!/data/data/com.termux/files/usr/bin/bash
+cd ~
+export RISH_APPLICATION_ID="com.termux"
+python hsc_master.py
+SNIPER_EOF
+    chmod +x "$_SNIPER"
+    echo "$(date): restored FINAL_SNIPER" >> "$LOG"
+fi
+unset _SNIPER
 
 echo "$(date): boot started (PID $$)" > "$LOG"
 termux-wake-lock
