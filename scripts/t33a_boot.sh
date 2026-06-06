@@ -22,6 +22,7 @@ WRAPPER=/sdcard/Download/T33A_wrapper
 ADB=/data/data/com.termux/files/usr/bin/adb
 NOTIFY_FLAG=/sdcard/Download/t33a_notify_ts
 AUTO_PULL="$HOME/t33a-remapper/scripts/t33a_auto_pull.sh"
+RISH=/data/local/tmp/rish             # shell 유저가 설치, Termux도 실행 가능
 
 # ── 자체 설치/업데이트 ─────────────────────────────────────────
 mkdir -p "$BOOT_DIR" "$SHORTCUT_DIR" 2>/dev/null
@@ -116,30 +117,19 @@ notify_adb_needed() {
     fi
 }
 
-# ── relay 시작 (shell 유저, PPID=1) ───────────────────────────
-start_relay() {
-    [ -z "$ADB_TARGET" ] && return 1
-
-    # 이미 살아있으면 skip (Termux 유저가 shell 유저의 /proc을 볼 수 없으므로 heartbeat 파일로 판정)
+# ── relay heartbeat 확인 헬퍼 ──────────────────────────────────
+_relay_alive() {
     HB_FILE=/data/local/tmp/t33a.heartbeat
-    if [ -f "$HB_FILE" ]; then
-        MTIME=$(stat -c %Y "$HB_FILE" 2>/dev/null || echo 0)
-        NOW=$(date +%s)
-        AGE=$((NOW - MTIME))
-        if [ "$AGE" -lt 180 ]; then
-            echo "$(date): relay alive (heartbeat age ${AGE}s) — skip" >> "$LOG"
-            return 0
-        fi
-    fi
+    [ -f "$HB_FILE" ] || return 1
+    MTIME=$(stat -c %Y "$HB_FILE" 2>/dev/null || echo 0)
+    NOW=$(date +%s)
+    AGE=$((NOW - MTIME))
+    [ "$AGE" -lt 180 ]
+}
 
-    echo "$(date): starting relay via ADB ($ADB_TARGET)" >> "$LOG"
-    rm -f "$RELAY_PID"
-
-    # setsid: 새 세션 → PPID=1로 고아화 → ADB 종료 후에도 생존
-    "$ADB" -s "$ADB_TARGET" shell \
-        "setsid /system/bin/sh '$RELAY_SCRIPT' < /dev/null > /dev/null 2>&1 &"
+_relay_check_start() {
+    # 시작 후 5초 대기 → heartbeat 30초 이내인지 확인
     sleep 5
-
     HB_FILE=/data/local/tmp/t33a.heartbeat
     MTIME=$(stat -c %Y "$HB_FILE" 2>/dev/null || echo 0)
     NOW=$(date +%s)
@@ -150,27 +140,80 @@ start_relay() {
         rm -f "$NOTIFY_FLAG"
         return 0
     fi
-
     echo "$(date): relay start failed (PID $RPID, heartbeat age ${AGE}s)" >> "$LOG"
     return 1
 }
 
-# ── 초기 시작 ──────────────────────────────────────────────────
-# Termux:Boot 후 adbd 준비까지 최대 1분 대기
-echo "$(date): connecting ADB..." >> "$LOG"
-for i in $(seq 1 6); do
-    if connect_adb; then
-        break
-    fi
-    echo "$(date): ADB attempt $i/6 failed, retry in 10s" >> "$LOG"
-    sleep 10
-done
+# ── rish 경유 relay 시작 (PRIMARY — Shizuku cgroup, USB 분리 무관) ──
+start_relay_via_rish() {
+    [ ! -f "$RISH" ] && return 1
+    chmod +x "$RISH" 2>/dev/null
 
-if [ -n "$ADB_TARGET" ]; then
-    start_relay
+    # Shizuku 동작 여부 확인
+    if ! RISH_APPLICATION_ID="com.termux" "$RISH" -c "echo ok" > /dev/null 2>&1; then
+        echo "$(date): rish/Shizuku not available" >> "$LOG"
+        return 1
+    fi
+
+    if _relay_alive; then
+        MTIME=$(stat -c %Y /data/local/tmp/t33a.heartbeat 2>/dev/null || echo 0)
+        AGE=$(( $(date +%s) - MTIME ))
+        echo "$(date): relay alive (heartbeat age ${AGE}s) — skip rish" >> "$LOG"
+        return 0
+    fi
+
+    echo "$(date): starting relay via rish (Shizuku cgroup — USB-independent)" >> "$LOG"
+    rm -f "$RELAY_PID"
+
+    RISH_APPLICATION_ID="com.termux" "$RISH" -c \
+        "setsid /system/bin/sh '$RELAY_SCRIPT' < /dev/null > /dev/null 2>&1 &"
+
+    _relay_check_start
+}
+
+# ── ADB 경유 relay 시작 (FALLBACK) ─────────────────────────────
+start_relay() {
+    [ -z "$ADB_TARGET" ] && return 1
+
+    if _relay_alive; then
+        MTIME=$(stat -c %Y /data/local/tmp/t33a.heartbeat 2>/dev/null || echo 0)
+        AGE=$(( $(date +%s) - MTIME ))
+        echo "$(date): relay alive (heartbeat age ${AGE}s) — skip ADB" >> "$LOG"
+        return 0
+    fi
+
+    echo "$(date): starting relay via ADB ($ADB_TARGET)" >> "$LOG"
+    rm -f "$RELAY_PID"
+
+    # setsid: 새 세션 → PPID=1로 고아화
+    "$ADB" -s "$ADB_TARGET" shell \
+        "setsid /system/bin/sh '$RELAY_SCRIPT' < /dev/null > /dev/null 2>&1 &"
+
+    _relay_check_start
+}
+
+# ── 초기 시작 ──────────────────────────────────────────────────
+# 1) rish (Shizuku) PRIMARY: USB 분리 무관, adbd cgroup 문제 없음
+echo "$(date): trying rish primary path..." >> "$LOG"
+if start_relay_via_rish; then
+    echo "$(date): relay up via rish — USB-independent" >> "$LOG"
 else
-    echo "$(date): ADB unavailable — entering retry loop, notifying user" >> "$LOG"
-    notify_adb_needed
+    # 2) ADB FALLBACK: rish/Shizuku 미동작 시
+    echo "$(date): rish failed, falling back to ADB..." >> "$LOG"
+    for i in $(seq 1 6); do
+        if connect_adb; then
+            break
+        fi
+        echo "$(date): ADB attempt $i/6 failed, retry in 10s" >> "$LOG"
+        sleep 10
+    done
+
+    if [ -n "$ADB_TARGET" ]; then
+        start_relay
+    else
+        echo "$(date): ADB unavailable — notifying user" >> "$LOG"
+        notify_adb_needed
+    fi
 fi
 
 # ── Termux 상주 watchdog ────────────────────────────────────────
@@ -192,11 +235,14 @@ while true; do
         else
             RPID=$(cat "$RELAY_PID" 2>/dev/null)
             echo "$(date): relay dead (heartbeat ${AGE}s, PID $RPID) — restarting" >> "$LOG"
-            ADB_TARGET=""
-            if connect_adb; then
-                start_relay || notify_adb_needed
-            else
-                notify_adb_needed
+            # rish PRIMARY 먼저 시도
+            if ! start_relay_via_rish; then
+                ADB_TARGET=""
+                if connect_adb; then
+                    start_relay || notify_adb_needed
+                else
+                    notify_adb_needed
+                fi
             fi
         fi
     fi
