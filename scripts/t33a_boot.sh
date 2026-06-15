@@ -22,20 +22,10 @@ WRAPPER=/sdcard/Download/T33A_wrapper
 ADB=/data/data/com.termux/files/usr/bin/adb
 NOTIFY_FLAG=/sdcard/Download/t33a_notify_ts
 AUTO_PULL="$HOME/t33a-remapper/scripts/t33a_auto_pull.sh"
-RISH_SRC=/sdcard/Download/rish
-RISH_DEX_SRC=/sdcard/Download/rish_shizuku.dex
-RISH="$HOME/rish"                    # Termux $HOME = 실행 가능 파티션
 
 # ── 자체 설치/업데이트 ─────────────────────────────────────────
 mkdir -p "$BOOT_DIR" "$SHORTCUT_DIR" 2>/dev/null
 [ -f "$SRC" ] && cp "$SRC" "$BOOT_DIR/t33a_boot.sh" && chmod +x "$BOOT_DIR/t33a_boot.sh"
-# rish를 Termux $HOME에 복사 — /sdcard, /data/local/tmp는 SELinux로 Termux 실행 불가
-if [ -f "$RISH_SRC" ] && [ -f "$RISH_DEX_SRC" ]; then
-    cp "$RISH_SRC" "$RISH" && \
-    cp "$RISH_DEX_SRC" "$HOME/rish_shizuku.dex" && \
-    chmod +x "$RISH" && \
-    echo "$(date): rish installed to \$HOME" >> "$LOG" 2>/dev/null || true
-fi
 # 바이너리 복사는 relay(shell 유저)가 담당 — Termux 유저가 직접 하면 "text file busy"
 # BIN_SRC가 있으면 relay가 다음 watchdog 사이클에 자동 교체
 [ -f "$RELAY_SCRIPT" ] && chmod +x "$RELAY_SCRIPT"
@@ -81,17 +71,9 @@ fi
 ADB_TARGET=""
 
 connect_adb() {
-    # 1) USB ADB: 재부팅 직후 / USB 연결 중에는 항상 가능
-    if "$ADB" devices 2>/dev/null | grep -qE '^[A-Za-z0-9]+.*device$'; then
-        USB_DEV=$("$ADB" devices 2>/dev/null | grep -E '^[A-Za-z0-9]+.*device$' | grep -v localhost | awk '{print $1}' | head -1)
-        if [ -n "$USB_DEV" ] && "$ADB" -s "$USB_DEV" shell echo ok > /dev/null 2>&1; then
-            ADB_TARGET="$USB_DEV"
-            echo "$(date): USB ADB ($USB_DEV)" >> "$LOG"
-            return 0
-        fi
-    fi
-
-    # 2) WiFi ADB (loopback)
+    # 1) TCP 루프백 (폰 자체 adbd) — PRIMARY.
+    #    relay가 USB 분리에도 살아남는 cgroup은 폰 내장 adbd(루프백)뿐.
+    #    USB로 띄운 relay는 선 뽑으면 cgroup째 죽으므로 루프백을 먼저 잡는다.
     PORT=$(getprop service.adb.tls.port 2>/dev/null)
     [ -z "$PORT" ] || [ "$PORT" = "0" ] && PORT=$(getprop service.adb.tcp.port 2>/dev/null)
     [ -z "$PORT" ] || [ "$PORT" = "0" ] && PORT=5555
@@ -99,8 +81,18 @@ connect_adb() {
     sleep 1
     if "$ADB" -s "localhost:$PORT" shell echo ok > /dev/null 2>&1; then
         ADB_TARGET="localhost:$PORT"
-        echo "$(date): WiFi ADB (localhost:$PORT)" >> "$LOG"
+        echo "$(date): ADB loopback (localhost:$PORT)" >> "$LOG"
         return 0
+    fi
+
+    # 2) USB ADB FALLBACK — 부트스트랩 전용(USB 분리 시 죽음, 루프백 안 될 때만)
+    if "$ADB" devices 2>/dev/null | grep -qE '^[A-Za-z0-9]+.*device$'; then
+        USB_DEV=$("$ADB" devices 2>/dev/null | grep -E '^[A-Za-z0-9]+.*device$' | grep -v localhost | awk '{print $1}' | head -1)
+        if [ -n "$USB_DEV" ] && "$ADB" -s "$USB_DEV" shell echo ok > /dev/null 2>&1; then
+            ADB_TARGET="$USB_DEV"
+            echo "$(date): USB ADB ($USB_DEV) — WARN: USB 분리 시 죽음" >> "$LOG"
+            return 0
+        fi
     fi
 
     ADB_TARGET=""
@@ -156,83 +148,46 @@ _relay_check_start() {
     return 1
 }
 
-# ── rish 경유 relay 시작 (PRIMARY — Shizuku cgroup, USB 분리 무관) ──
-start_relay_via_rish() {
-    [ ! -f "$RISH" ] && return 1
-    chmod +x "$RISH" 2>/dev/null
-
-    # Shizuku 동작 여부 확인
-    if ! RISH_APPLICATION_ID="com.termux" "$RISH" -c "echo ok" > /dev/null 2>&1; then
-        echo "$(date): rish/Shizuku not available" >> "$LOG"
-        return 1
-    fi
-
-    echo "$(date): starting relay via rish (Shizuku cgroup — USB-independent)" >> "$LOG"
-    # 기존 relay 정리 — 중복 인스턴스 방지 (start.sh와 동일)
-    RPID=$(cat "$RELAY_PID" 2>/dev/null)
-    [ -n "$RPID" ] && kill "$RPID" 2>/dev/null; sleep 0.5
-    rm -f "$RELAY_PID"
-    rm -f /data/local/tmp/t33a.relay_hb  # stale hb 제거
-
-    RISH_APPLICATION_ID="com.termux" "$RISH" -c \
-        "setsid /system/bin/sh '$RELAY_SCRIPT' < /dev/null > /dev/null 2>&1 &"
-
-    _relay_check_start
-}
-
-# ── ADB 경유 relay 시작 (FALLBACK) ─────────────────────────────
+# ── ADB(TCP 루프백) 경유 relay 시작 (self-contained) ───────────
 start_relay() {
     [ -z "$ADB_TARGET" ] && return 1
 
     echo "$(date): starting relay via ADB ($ADB_TARGET)" >> "$LOG"
-    rm -f "$RELAY_PID"
-    rm -f /data/local/tmp/t33a.relay_hb  # stale hb 제거 → _relay_check_start 1차 성공 보장
+    rm -f "$RELAY_PID"   # /sdcard: Termux 유저 쓰기 가능
 
-    # setsid: 새 세션 → PPID=1로 고아화
+    # ⚠️ 정리·stale hb 삭제·기동을 모두 adb shell(=shell 유저)로 수행.
+    #    /data/local/tmp = 0771 shell:shell → Termux 유저는 그 안 파일 rm 불가(과거 회귀버그).
+    #    pkill -x: 정확한 프로세스명만 → 이 launcher 셸(cmdline에 t33a_remap 문자열 포함) 자기-kill 방지.
+    #    setsid: 새 세션 → PPID=1 고아화 (USB/ADB 종료 후 생존).
     "$ADB" -s "$ADB_TARGET" shell \
-        "setsid /system/bin/sh '$RELAY_SCRIPT' < /dev/null > /dev/null 2>&1 &"
+        "pkill -x t33a_remap 2>/dev/null; rm -f /data/local/tmp/t33a.relay_hb; setsid /system/bin/sh '$RELAY_SCRIPT' < /dev/null > /dev/null 2>&1 &"
 
     _relay_check_start
 }
 
 # ── 초기 시작 ──────────────────────────────────────────────────
-# relay가 이미 살아있으면 rish/ADB 루프 스킵 (watchdog 재시작 시 즉시 진입)
+# relay가 이미 살아있으면 시작 루프 스킵 (watchdog 재시작 시 즉시 진입)
 _HB_Q=/data/local/tmp/t33a.relay_hb
 [ ! -f "$_HB_Q" ] && _HB_Q=/data/local/tmp/t33a.heartbeat
 _HB_Q_AGE=$(( $(date +%s) - $(stat -c %Y "$_HB_Q" 2>/dev/null || echo 0) ))
-RISH_OK=0
 if [ "$_HB_Q_AGE" -lt 30 ]; then
     echo "$(date): relay already alive (hb age ${_HB_Q_AGE}s) — skipping startup" >> "$LOG"
-    RISH_OK=1
 else
-    # 1) rish (Shizuku) PRIMARY — 최대 60초 대기 (부팅 후 Shizuku 준비 시간)
-    echo "$(date): waiting for Shizuku/rish (max 60s)..." >> "$LOG"
-    for i in $(seq 1 12); do
-        if start_relay_via_rish; then
-            echo "$(date): relay up via rish (attempt $i) — USB-independent" >> "$LOG"
-            RISH_OK=1
+    # TCP 루프백 ADB로 relay 시작 (PRIMARY — 외부 앱 의존 0, 폰 내장 adbd)
+    echo "$(date): starting relay via ADB loopback (self-contained)..." >> "$LOG"
+    for i in $(seq 1 6); do
+        if connect_adb; then
             break
         fi
-        sleep 5
+        echo "$(date): ADB attempt $i/6 failed, retry in 10s" >> "$LOG"
+        sleep 10
     done
 
-    if [ "$RISH_OK" = "0" ]; then
-        # 2) ADB FALLBACK: rish/Shizuku 미동작 시
-        echo "$(date): rish unavailable after 60s, falling back to ADB..." >> "$LOG"
-        for i in $(seq 1 6); do
-            if connect_adb; then
-                break
-            fi
-            echo "$(date): ADB attempt $i/6 failed, retry in 10s" >> "$LOG"
-            sleep 10
-        done
-
-        if [ -n "$ADB_TARGET" ]; then
-            start_relay
-        else
-            echo "$(date): ADB unavailable — notifying user" >> "$LOG"
-            notify_adb_needed
-        fi
+    if [ -n "$ADB_TARGET" ]; then
+        start_relay
+    else
+        echo "$(date): ADB unavailable — notifying user" >> "$LOG"
+        notify_adb_needed
     fi
 fi
 unset _HB_Q _HB_Q_AGE
@@ -258,14 +213,11 @@ while true; do
         else
             RPID=$(cat "$RELAY_PID" 2>/dev/null)
             echo "$(date): relay dead (heartbeat ${AGE}s, PID $RPID) — restarting" >> "$LOG"
-            # rish PRIMARY 먼저 시도
-            if ! start_relay_via_rish; then
-                ADB_TARGET=""
-                if connect_adb; then
-                    start_relay || notify_adb_needed
-                else
-                    notify_adb_needed
-                fi
+            ADB_TARGET=""
+            if connect_adb; then
+                start_relay || notify_adb_needed
+            else
+                notify_adb_needed
             fi
         fi
     fi
