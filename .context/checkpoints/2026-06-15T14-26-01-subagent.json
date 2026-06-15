@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-06-15T14:26:01.610Z",
+  "subagent_input": {
+    "session_id": "53429b3d-23c6-4539-944b-13eb968d401e",
+    "transcript_path": "/Users/noir/.claude/projects/-Users-noir/53429b3d-23c6-4539-944b-13eb968d401e.jsonl",
+    "cwd": "/Users/noir/Projects/t33a-remapper",
+    "permission_mode": "bypassPermissions",
+    "agent_id": "a2dbcb8c5cc55ae3c",
+    "agent_type": "",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "SubagentStop",
+    "stop_hook_active": false,
+    "agent_transcript_path": "/Users/noir/.claude/projects/-Users-noir/53429b3d-23c6-4539-944b-13eb968d401e/subagents/agent-a2dbcb8c5cc55ae3c.jsonl",
+    "last_assistant_message": "T33A 리모컨을 Shizuku 없이 standalone으로 복원 중. 수정된 스크립트를 폰에 배포 완료했고, 새 코드를 띄우려면 네가 폰에서 T33A 위젯을 1번 탭해야 해. 탭하고 \"했어\"라고 하면 바로 로그로 검증할게.",
+    "background_tasks": [],
+    "session_crons": []
+  },
+  "changed_files": [],
+  "changed_count": 0,
+  "status": "clean",
+  "phase": "unknown",
+  "resume_prompt": "/pickup"
+}
