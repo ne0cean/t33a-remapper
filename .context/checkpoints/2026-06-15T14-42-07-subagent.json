@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-06-15T14:42:07.103Z",
+  "subagent_input": {
+    "session_id": "53429b3d-23c6-4539-944b-13eb968d401e",
+    "transcript_path": "/Users/noir/.claude/projects/-Users-noir/53429b3d-23c6-4539-944b-13eb968d401e.jsonl",
+    "cwd": "/Users/noir/Projects/t33a-remapper",
+    "permission_mode": "bypassPermissions",
+    "agent_id": "adfd8e8b183a583f4",
+    "agent_type": "",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "SubagentStop",
+    "stop_hook_active": false,
+    "agent_transcript_path": "/Users/noir/.claude/projects/-Users-noir/53429b3d-23c6-4539-944b-13eb968d401e/subagents/agent-adfd8e8b183a583f4.jsonl",
+    "last_assistant_message": "T33A 리모컨을 Shizuku 없이 standalone으로 복원하는 작업 중이고, 코드 수정·배포는 끝났어. 다음 할 일은 너가 USB를 뽑은 채 리모컨 버튼을 눌러 동작하는지 확인해주는 거야.",
+    "background_tasks": [],
+    "session_crons": []
+  },
+  "changed_files": [],
+  "changed_count": 0,
+  "status": "clean",
+  "phase": "unknown",
+  "resume_prompt": "/pickup"
+}
