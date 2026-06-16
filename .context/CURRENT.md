@@ -30,7 +30,7 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
   - 수정: boot.sh cleanup 루프에 FINAL_SNIPER 보존, 부팅 시 재생성 코드 추가
   - 수정: T33A_wrapper를 단순 실행 버전으로 교체 (cleanup 코드 제거)
   - 수정: t33a_start.sh를 /data/local/tmp/ + /sdcard/Download/ 양쪽 배포
-- ⚠️ **standalone 재검증 필요** — 이전 "불가 확정"은 잘못된 테스트 결과 (Mac에서 USB ADB로 relay 직접 시작 → cgroup kill). boot.sh TCP path(localhost:5555)로 올바르게 시작된 relay의 USB 분리 생존 여부는 아직 검증 안 됨.
+- ✅ **Shizuku 의존 제거 + standalone 실증 완료** (2026-06-15) — iOS→갤럭시 마이그레이션 후 삼성 보안이 Shizuku를 악성코드 오진·삭제 → standalone 생존 엔진(rish) 소실 → USB cgroup fallback만 남아 "USB 붙어야만 동작". **진짜 원인 2개**: ①relay_hb를 Termux 유저가 `/data/local/tmp`(0771 shell:shell)에서 rm 불가 → stale → 무한 재시작 ②USB cgroup 선점. **수정**: boot.sh/start.sh에서 rish 경로 전면 제거, relay 정리/hb삭제/기동을 전부 `adb shell`(shell유저)로 이관, connect_adb 루프백 우선. **검증**: USB 분리+BLE 버튼 물리 동작 O, relay_pid(11506) 불변 + relay_hb 연속 갱신(끊김 0) + boot.log "relay dead" 0건. adbd 단일데몬이라 루프백 relay는 USB 분리 생존 확정.
 - **`/debrief` 스킬 글로벌 등록** (2026-06-06) — `~/.claude/commands/debrief.md`. 복잡한 세션 후 Orient→Extract→Commit→Gate 4단계 자동 정리. `/end` Step 6.74에 트리거 연동.
 - **레슨 2개 MEMORY.md 추가** (2026-06-06): relay_hb stale 첫 재시작 실패 버그, 공유 디렉토리 수정 전 ls 필수
 
@@ -38,9 +38,10 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 (없음)
 
 ## ⏩ Next Tasks
-1. **USB 분리 standalone 실증 테스트** — 이론상 OK (TCP 루프백 cgroup). USB 빼고 BLE 버튼 눌러서 확인
-2. **배터리 50% 이하 테스트** — low_power=1 전환 시 BLE 끊김 여부 확인
-3. **새 매핑 작업 시 pre-flight 필수**: `adb shell getprop service.adb.tcp.port` → 5555 확인, daemon=active 확인
+1. **재부팅 후 자동 복구 실측** (미검증) — 폰 재부팅 → 8분 대기(Termux:Boot 지연) → USB 없이 BLE 버튼. 핵심 변수 = 삼성이 `tcpip 5555`를 재부팅 후 살려두는지. 깨지면 → 컨틴전시(아래) 또는 option 2(별도기기 루팅) 검토
+2. **컨틴전시 설계** — 진짜 위험은 "폰 쪽"(이번 고장 전부 폰). 여분 BLE 리모컨은 공짜 보험이나 약한 고리(리모컨 물리고장만 커버). 폰 컨틴전시 = 여분 기기 필요(이상적으론 루팅한 별도 기기 = 본체 안 건드림 + 삼성OS 독립 고장 + 견고). **단 같은 폰 루팅은 와이프되므로 불가, 반드시 별도 기기.** 여분 리모컨은 같은 모델이면 지금 페어링만, 다른 모델이면 키코드 추출+config 매핑(`lesson_t33a_key_mapping_oneshot`)
+3. **배터리 50% 이하 테스트** — low_power=1 전환 시 BLE 끊김 여부 확인
+4. **새 매핑 작업 시 pre-flight 필수**: `adb shell getprop service.adb.tcp.port` → 5555 확인, daemon=active 확인
 
 ## 🚧 Blockers
 - `~/.termux/boot/` 및 `~/.shortcuts/` 접근/수정은 **Android 14+ 데이터 격리로 ADB 완전 차단**. Termux 내부 실행 필수.

@@ -5,6 +5,23 @@
 
 ---
 
+## [2026-06-15] Shizuku 의존 제거 → 순수 루프백 standalone 복원
+
+**증상**: iOS→갤럭시 마이그레이션 후 "리모컨이 USB 붙어야만 동작, 분리하면 안 됨" 재발. 사용자가 악성코드 진단된 앱(=Shizuku)을 삭제한 게 발단.
+
+**진단(/investigate)**: 삭제 앱 = Shizuku 확정(패키지 없음, rish 잔재만). boot.log 분석으로 진짜 원인 2개 발견 — ①`/data/local/tmp`(0771 shell:shell)에서 Termux 유저가 relay_hb를 rm 불가 → `Permission denied` → stale heartbeat → `_relay_check_start` 매번 실패 오판 → 무한 재시작 ②connect_adb가 USB 먼저 잡아 USB cgroup → 분리 시 사망. (relay_hb 회귀버그는 6/6 도입 시 유입.)
+
+**수정**: boot.sh/start.sh에서 rish(Shizuku) 경로 전면 제거(HSC FINAL_SNIPER 보존). relay 정리·stale hb 삭제·기동을 전부 `adb shell`(shell 유저)로 이관. connect_adb TCP 루프백 우선.
+
+**검증**: USB 분리 + BLE 버튼 물리 동작 O. relay_pid(11506) 불변 + relay_hb mtime 연속(끊김 0) + boot.log "relay dead" 0건으로 생존 교차검증. 메커니즘 = adbd는 init 단일데몬(PPID=1)이라 TCP 5555 켜진 한 USB 분리에도 안 죽음 → 루프백 cgroup relay 생존.
+
+**완료**: Shizuku-free standalone 복원. 글로벌 메모리 3건(lesson+feedback+기존 갱신).
+**이슈**: 재부팅 후 자동 복구는 미검증(다음 세션). 컨틴전시(폰 쪽 백업) 미설계.
+**빌드**: ✅ `bash -n` PASS, 폰 실동작 검증
+**커밋**: auto-sync 데몬이 8ce339c/685e177로 커밋+푸시 완료
+
+---
+
 ## [2026-06-06] standalone 구조 복구 + 워치독 강화 + launchd 수정
 
 **완료**:
