@@ -37,8 +37,13 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone �
 ## 🛠 Working On
 (없음)
 
+## ✅ 2026-06-20 fix
+- **relay 재시작 시 daemon 보존** — relay가 죽고 새로 뜰 때 daemon PID 살아있으면 kill/restart 생략 → BLE 연결 유지 → 30초 딜레이 소멸
+- **USB 해제 OK 확인** — TCP loopback relay는 USB cgroup 밖. CLAUDE.md "절대 안 됨" 경고 삭제
+- 원인: relay 25초 주기 사망 시 daemon도 같이 죽었던 구조 → 픽스로 해소
+
 ## ⏩ Next Tasks
-1. **재부팅 후 자동 복구 실측** (미검증) — 폰 재부팅 → 8분 대기(Termux:Boot 지연) → USB 없이 BLE 버튼. 핵심 변수 = 삼성이 `tcpip 5555`를 재부팅 후 살려두는지. 깨지면 → 컨틴전시(아래) 또는 option 2(별도기기 루팅) 검토
+1. ~~**재부팅 후 자동 복구 실측**~~ ✅ **완료 (2026-06-20)** — 재부팅 후 위젯 탭으로 복구 확인. tcpip 5555 재부팅 생존 확인. USB 불필요.
 2. **컨틴전시 설계** — 진짜 위험은 "폰 쪽"(이번 고장 전부 폰). 여분 BLE 리모컨은 공짜 보험이나 약한 고리(리모컨 물리고장만 커버). 폰 컨틴전시 = 여분 기기 필요(이상적으론 루팅한 별도 기기 = 본체 안 건드림 + 삼성OS 독립 고장 + 견고). **단 같은 폰 루팅은 와이프되므로 불가, 반드시 별도 기기.** 여분 리모컨은 같은 모델이면 지금 페어링만, 다른 모델이면 키코드 추출+config 매핑(`lesson_t33a_key_mapping_oneshot`)
 3. **배터리 50% 이하 테스트** — low_power=1 전환 시 BLE 끊김 여부 확인
 4. **새 매핑 작업 시 pre-flight 필수**: `adb shell getprop service.adb.tcp.port` → 5555 확인, daemon=active 확인
