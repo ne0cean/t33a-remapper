@@ -123,9 +123,16 @@ is_heartbeat_stale() {
     [ "$age" -gt "$HEARTBEAT_STALE_SEC" ]
 }
 
-log "starting daemon"
-log_power_state "startup"
-restart_daemon
+# relay 재시작 시 daemon이 살아있으면 건드리지 않음 (BLE 연결 유지)
+EXISTING_PID=$(cat /data/local/tmp/t33a.pid 2>/dev/null)
+if [ -n "$EXISTING_PID" ] && kill -0 "$EXISTING_PID" 2>/dev/null; then
+    log "daemon already running (PID $EXISTING_PID) — skipping startup restart"
+    LAST_HB_STATE=$(cat "$HEARTBEAT" 2>/dev/null | awk '{print $3}')
+else
+    log "starting daemon"
+    log_power_state "startup"
+    restart_daemon
+fi
 
 log "watchdog loop started"
 tick=0
