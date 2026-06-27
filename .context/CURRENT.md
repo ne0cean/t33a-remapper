@@ -1,7 +1,10 @@
 # Current Status
 
+## ⚠️ REALITY 정정 (2026-06-27) — 아래 과거 "standalone 실증/USB 불필요" 기록은 거짓
+비루팅 폰에선 **재부팅/OS업데이트 후 PC 없이 자동복구 불가**(순환 부트스트랩: adbd TCP를 켜는 유일한 외부 주체가 PC). 평상시 동작·USB탈거는 OK지만, 재부팅하면 PC 1회 꽂아야 함. Mac launchd가 꽂는 즉시 tcpip→복구폴링→macOS 알림까지 자동화함(`~/bin/t33a-auto-tcpip.sh`, 2026-06-27 풀체인 업그레이드, 라이브 검증됨). 진짜 영구 standalone=별도 루팅기기뿐. 상세: `memory/lesson_t33a_adb_bootstrap_impossible.md`
+
 ## 📌 프로젝트 1줄
-T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **PC 없이 standalone 영구 동작 목표**.
+T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **평상시 standalone, 재부팅 후 PC 1회 부트스트랩 필요**(위 REALITY 참조).
 
 → 상세/경로표/진단순서: [CLAUDE.md](../CLAUDE.md) 필독
 → 함정 금지목록: [lessons/16](../lessons/16-android-ble-input-remapping.md) 교훈 6~9

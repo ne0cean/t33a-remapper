@@ -1,6 +1,8 @@
 # T33A Remote Key Remapper
 
-T33A BLE 리모컨 버튼을 Android에서 커널 레벨로 리매핑하는 데몬. **설치 후 PC 없이 standalone 영구 동작.**
+T33A BLE 리모컨 버튼을 Android에서 커널 레벨로 리매핑하는 데몬.
+
+> ⚠️ **현실(REALITY) — 2026-06-27 정정**: 비루팅 Samsung(Android 14+)에서 **"PC 없이 영구 standalone"은 구조적으로 불가능**하다. 평상시(폰 안 끔)엔 standalone 동작하지만, **재부팅/OS업데이트 후엔 PC에 1회 꽂아야 복구**된다. 이유: 데몬이 `/dev/input`(shell uid=2000) 접근에 폰 adbd의 TCP loopback이 필요한데, `adb tcpip 5555`가 재부팅 후 살아남지 않고, 이를 다시 켜는 유일한 주체가 PC 연결 시 도는 Mac launchd(`com.ateam.t33a-tcpip`)다. 위젯은 Termux 유저라 adbd 모드를 못 바꾼다. 진짜 영구 standalone은 **별도 루팅 기기**에서만 가능. 상세: `~/.claude/.../memory/lesson_t33a_adb_bootstrap_impossible.md`
 
 ## 문제
 
