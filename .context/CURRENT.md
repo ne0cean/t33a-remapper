@@ -69,6 +69,7 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **평상시 standalone, �
 8. **Termux 유저는 shell 유저의 `/proc/PID`를 볼 수 없음** — `boot.sh` watchdog에서 PID 존재 확인 시 `/proc` 대신 heartbeat 파일(`t33a.heartbeat`)의 수정 시간을 사용해야 함.
 
 ## 📝 Recent Activity
+- **2026-06-27**: **세션 복구 + REALITY 정정 커밋**. 리셋(컨텍스트 종료)으로 끊긴 세션 복구 — 작업물 손실 0(전부 디스크). 이전 세션 산출물 = "PC 연결만으로 즉시 자동복구" 대안(`~/bin/t33a-auto-tcpip.sh` 풀체인 + launchd `com.ateam.t33a-tcpip`)이 미커밋이던 것을 커밋(`4c22a15` 정정 + `58f9426` 검증마커). 라이브 점검: tcp:5555·status=active·relay_hb age 1s 정상. 콜드패스 풀체인만 다음 재부팅 시 `/tmp/t33a-tcpip.log` 자기검증 대기(Next Tasks #0).
 - **2026-06-06 (2차)**: **`/debrief` 스킬 구현** — 복잡한 세션 후 학습 추출/정리/Pre-flight Gate 자동화. GitHub 리서치(session-retrospective, dream-skill, clean-up) + 오늘 T33A 교훈 반영. `~/.claude/commands/debrief.md` 글로벌 등록. `/end` Step 6.74 트리거 연동. 레슨 2개 추가: relay_hb stale, 공유 디렉토리 ls.
 - **2026-06-06**: **standalone 구조 복구 + 워치독 강화** (2026-06-06)
   - 원인: 이전 세션에서 Mac에서 USB ADB로 relay 직접 시작 → adbd USB cgroup → USB 분리 시 죽음

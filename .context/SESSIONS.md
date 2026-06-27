@@ -5,6 +5,18 @@
 
 ---
 
+## [2026-06-27] 세션 복구 + REALITY 정정 커밋 + 콜드패스 검증 마커
+
+**상황**: 컨텍스트 윈도우 종료(리셋)로 끊긴 세션 복구. RESUME.md/zzz 흔적 없음 → 작업물 손실 아님(전부 디스크). 끊긴 작업 = "ADB 의존 불가피 인정 → 최소한 PC 연결만으로 즉시 복구하는 대안 제시" 요구의 산출물이 미커밋 상태였음.
+
+**확인된 산출물(이전 세션)**: `~/bin/t33a-auto-tcpip.sh` 풀체인 업그레이드 + launchd `com.ateam.t33a-tcpip`(PID 27249, KeepAlive). 동작 = 폰 USB 연결 감지 → `service.adb.tcp.port` 확인 → 5555 아니면 `adb tcpip 5555` → relay_hb 최대 30s 폴링(폰 watchdog가 loopback relay 부활) → macOS 알림 ✅/⚠️. 즉 "PC 꽂기만 하면 자동복구"가 정확히 구현됨.
+
+**검증 현황**: tcpip 자동활성(19:25 로그) + 이미-tcp 복구알림(19:57 로그, relay_hb age 0s, status=active) = ✅. 라이브 상태 점검: 폰 연결·tcp:5555·status=active·relay_hb age 1s 정상. **미검증** = 재부팅 콜드패스 풀체인(신버전 복구폴링 코드가 실재 재부팅에서 미발화) — 파괴적 라이브 테스트는 사용자가 보류, 다음 실제 재부팅 시 `/tmp/t33a-tcpip.log` 자기검증으로 결정. 콜드패스는 실제 재부팅 시 USB 끊김으로 `LAST_DEV` 리셋되어 확실히 발화함(코드 트레이스 확인).
+
+**커밋**: `4c22a15` REALITY 정정(CURRENT.md+README.md — 비루팅 재부팅 후 PC 1회 부트스트랩 필요 명시) + `58f9426` 콜드패스 검증 대기 마커(Next Tasks #0).
+
+**빌드**: N/A (docs-only 세션, C+shell 프로젝트라 빌드시스템 없음).
+
 ## [2026-06-15] Shizuku 의존 제거 → 순수 루프백 standalone 복원
 
 **증상**: iOS→갤럭시 마이그레이션 후 "리모컨이 USB 붙어야만 동작, 분리하면 안 됨" 재발. 사용자가 악성코드 진단된 앱(=Shizuku)을 삭제한 게 발단.
