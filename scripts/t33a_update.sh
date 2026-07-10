@@ -68,6 +68,22 @@ if [ "$CHANGED_SCRIPTS" -gt 0 ]; then
     log "스크립트 갱신: boot/relay/start"
 fi
 
+# [3.5] boot.sh 즉시 활성화 — $BOOT_DIR 설치 + watchdog 재시작
+# (기존엔 boot.sh 자체설치가 다음 부팅에야 실행 → 새 로직이 한 부팅 늦게 적용되는 결함)
+if [ "$CHANGED_SCRIPTS" -gt 0 ]; then
+    BOOT_DIR="$HOME/.termux/boot"
+    mkdir -p "$BOOT_DIR"
+    cp "$REPO/scripts/t33a_boot.sh" "$BOOT_DIR/t33a_boot.sh"
+    chmod +x "$BOOT_DIR/t33a_boot.sh"
+    OLD_BOOT=$(pgrep -f "t33a_boot.sh" 2>/dev/null | head -1)
+    if [ -n "$OLD_BOOT" ]; then
+        kill "$OLD_BOOT" 2>/dev/null
+        sleep 1
+    fi
+    nohup bash "$BOOT_DIR/t33a_boot.sh" < /dev/null >> /sdcard/Download/t33a_boot.log 2>&1 &
+    log "boot.sh 재설치 + watchdog 재시작 (PID $!)"
+fi
+
 # [4] relay 통해 데몬 재시작
 log "데몬 재시작 (relay cmd)..."
 echo "update" > "$CMD"

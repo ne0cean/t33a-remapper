@@ -118,6 +118,23 @@ notify_adb_needed() {
     fi
 }
 
+# ── 무선 디버깅 자동 ON ────────────────────────────────────────
+# Android는 재부팅마다 wireless debugging을 끔 → loopback ADB 불가로 복구 실패.
+# Termux에 WRITE_SECURE_SETTINGS가 부여되어 있으면 여기서 직접 재활성화.
+# (1회 부여: adb shell pm grant com.termux android.permission.WRITE_SECURE_SETTINGS)
+SETTINGS=/system/bin/settings
+enable_wireless_adb() {
+    CUR=$("$SETTINGS" get global adb_wifi_enabled 2>/dev/null)
+    [ "$CUR" = "1" ] && return 0
+    if "$SETTINGS" put global adb_wifi_enabled 1 2>/dev/null; then
+        echo "$(date): wireless debugging re-enabled (adb_wifi_enabled ${CUR:-?}→1)" >> "$LOG"
+        sleep 3   # adbd TLS 서버 기동 대기
+        return 0
+    fi
+    echo "$(date): enable_wireless_adb 실패 — WRITE_SECURE_SETTINGS 미부여?" >> "$LOG"
+    return 1
+}
+
 # ── relay heartbeat 확인 헬퍼 ──────────────────────────────────
 _relay_alive() {
     HB_FILE=/data/local/tmp/t33a.heartbeat
@@ -176,6 +193,7 @@ else
     # TCP 루프백 ADB로 relay 시작 (PRIMARY — 외부 앱 의존 0, 폰 내장 adbd)
     echo "$(date): starting relay via ADB loopback (self-contained)..." >> "$LOG"
     for i in $(seq 1 6); do
+        enable_wireless_adb   # 재부팅 시 OS가 끈 무선 디버깅 재활성화 (WiFi 미연결 대비 매회 시도)
         if connect_adb; then
             break
         fi
@@ -202,6 +220,8 @@ while true; do
 
     if [ "$tick" -ge 15 ]; then
         tick=0
+        # 무선 디버깅 꺼짐 감지 → 재활성화 (OS/Samsung이 임의로 끄는 경우 방어)
+        enable_wireless_adb
         # relay 자체 heartbeat (10s 갱신) — 빠른 감지. 없으면 기존 t33a.heartbeat 폴백
         HB_FILE=/data/local/tmp/t33a.relay_hb
         [ ! -f "$HB_FILE" ] && HB_FILE=/data/local/tmp/t33a.heartbeat
