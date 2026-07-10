@@ -122,16 +122,45 @@ notify_adb_needed() {
 # Android는 재부팅마다 wireless debugging을 끔 → loopback ADB 불가로 복구 실패.
 # Termux에 WRITE_SECURE_SETTINGS가 부여되어 있으면 여기서 직접 재활성화.
 # (1회 부여: adb shell pm grant com.termux android.permission.WRITE_SECURE_SETTINGS)
-SETTINGS=/system/bin/settings
+# Termux 유저의 system binary 실행은 기기/버전에 따라 경로가 달라 다중 프로브로 탐지.
+SETTINGS_CMD=""
+_WADB_DEAD=""
+_detect_settings() {
+    for c in \
+        "settings" \
+        "/system/bin/settings" \
+        "env -u LD_PRELOAD /system/bin/settings" \
+        "/system/bin/cmd settings" \
+        "env -u LD_PRELOAD /system/bin/cmd settings"; do
+        V=$(eval "$c get global adb_wifi_enabled" 2>&1)
+        case "$V" in
+            0|1|null)
+                SETTINGS_CMD="$c"
+                echo "$(date): settings 실행경로 확정: [$c] (adb_wifi_enabled=$V)" >> "$LOG"
+                return 0 ;;
+        esac
+        echo "$(date): settings probe fail [$c]: $(echo "$V" | head -1)" >> "$LOG"
+    done
+    return 1
+}
 enable_wireless_adb() {
-    CUR=$("$SETTINGS" get global adb_wifi_enabled 2>/dev/null)
+    [ -n "$_WADB_DEAD" ] && return 1
+    if [ -z "$SETTINGS_CMD" ]; then
+        if ! _detect_settings; then
+            echo "$(date): enable_wireless_adb 사용 불가 — 모든 settings 실행경로 실패 (이 세션에서 재시도 안 함)" >> "$LOG"
+            _WADB_DEAD=1
+            return 1
+        fi
+    fi
+    CUR=$(eval "$SETTINGS_CMD get global adb_wifi_enabled" 2>/dev/null)
     [ "$CUR" = "1" ] && return 0
-    if "$SETTINGS" put global adb_wifi_enabled 1 2>/dev/null; then
+    ERR=$(eval "$SETTINGS_CMD put global adb_wifi_enabled 1" 2>&1)
+    if [ "$(eval "$SETTINGS_CMD get global adb_wifi_enabled" 2>/dev/null)" = "1" ]; then
         echo "$(date): wireless debugging re-enabled (adb_wifi_enabled ${CUR:-?}→1)" >> "$LOG"
         sleep 3   # adbd TLS 서버 기동 대기
         return 0
     fi
-    echo "$(date): enable_wireless_adb 실패 — WRITE_SECURE_SETTINGS 미부여?" >> "$LOG"
+    echo "$(date): settings put 실패 — WRITE_SECURE_SETTINGS 미부여? ($(echo "$ERR" | head -1))" >> "$LOG"
     return 1
 }
 
