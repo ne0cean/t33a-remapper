@@ -446,3 +446,18 @@
 - 긴 디버깅 세션 중 pkill -9 반복으로 좀비 프로세스 누적 → EVIOCGRAB 충돌
 
 **빌드**: ✅ (Termux clang arm64, remove_pid 픽스 포함)
+
+## [2026-07-10] 재부팅 후 무선 디버깅 자동 ON — WADB Keeper APK
+
+**완료**:
+- 폰 재부팅 후 리매퍼 미복구 → 원인: adb tcpip 5555 + 무선 디버깅 모두 재부팅에 소멸. 사용자 수동 토글 1회로 즉시 자동 복구됨 (설계대로)
+- Termux에 WRITE_SECURE_SETTINGS 부여 → **CLI(settings/cmd) 5경로 전부 SELinux 무음 차단 실측** (Android 16 앱 uid 제약)
+- **WADB Keeper APK 자체 제작** (smali 직접 작성 + apktool 3.0.2, Android Studio 불필요, 3.9KB, targetSdk 28 + jarsigner v1): BOOT_COMPLETED → Settings.Global adb_wifi_enabled=1
+- 실기기 e2e PASS: setsid 지연 브로드캐스트 심고 무선 디버깅 강제 OFF → 리시버가 8초 내 되켬 → mdns 재광고 → daemon Running 유지
+- boot.sh enable_wireless_adb 다중 프로브(진단용) + update.sh [3.5] boot.sh 즉시 BOOT_DIR 설치+watchdog 재시작 (한 부팅 지연 결함 수정)
+- CLAUDE.md·CURRENT.md REALITY 재정정 ("PC 없이 재부팅 복구 불가능" 판정 파기)
+- 글로벌 메모리 레슨 저장: lesson_android_termux_settings_selinux
+
+**이슈**: 무선 디버깅 포트가 매번 랜덤 로테이트 → adb mdns services로 재발견 필요. pm 기본 유저가 150(SecureFolder)이라 --user 0 명시 필요.
+**빌드**: ✅ (bash -n 전 스크립트, apktool 빌드/설치/e2e 검증)
+**미검증**: 실제 재부팅 풀체인 (Next Tasks -1번, 사용자가 나중에)
