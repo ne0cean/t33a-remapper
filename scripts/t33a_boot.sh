@@ -241,35 +241,41 @@ unset _HB_Q _HB_Q_AGE
 
 # ── Termux 상주 watchdog ────────────────────────────────────────
 # relay는 PPID=1이므로 거의 죽지 않음.
-# 60초마다 /proc으로 확인 → 죽으면 ADB로 재시작.
+# 15초마다 heartbeat 확인 → 죽으면 ADB로 재시작.
+# sleep 1×15틱이 아니라 sleep 15 — 감지 주기는 동일하고 CPU 웨이크업만 1/15.
+# FAILS 백오프: ADB 장기 불가(무선 디버깅 OFF 등)에서 15s 재시도 폭풍 방지
+#   (2026-07-23 실측: relay 죽은 채 15시간 × 18초 간격 재시도+알림).
 echo "$(date): watchdog loop started" >> "$LOG"
-tick=0
+FAILS=0
 while true; do
-    tick=$((tick + 1))
-
-    if [ "$tick" -ge 15 ]; then
-        tick=0
-        # 무선 디버깅 꺼짐 감지 → 재활성화 (OS/Samsung이 임의로 끄는 경우 방어)
-        enable_wireless_adb
-        # relay 자체 heartbeat (10s 갱신) — 빠른 감지. 없으면 기존 t33a.heartbeat 폴백
-        HB_FILE=/data/local/tmp/t33a.relay_hb
-        [ ! -f "$HB_FILE" ] && HB_FILE=/data/local/tmp/t33a.heartbeat
-        MTIME=$(stat -c %Y "$HB_FILE" 2>/dev/null || echo 0)
-        NOW=$(date +%s)
-        AGE=$((NOW - MTIME))
-        if [ "$AGE" -lt 20 ]; then
-            : # relay alive (relay_hb age < 20s)
+    # 무선 디버깅 꺼짐 감지 → 재활성화 (OS/Samsung이 임의로 끄는 경우 방어)
+    enable_wireless_adb
+    # relay 자체 heartbeat (10s 갱신) — 빠른 감지. 없으면 기존 t33a.heartbeat 폴백
+    HB_FILE=/data/local/tmp/t33a.relay_hb
+    [ ! -f "$HB_FILE" ] && HB_FILE=/data/local/tmp/t33a.heartbeat
+    MTIME=$(stat -c %Y "$HB_FILE" 2>/dev/null || echo 0)
+    NOW=$(date +%s)
+    AGE=$((NOW - MTIME))
+    if [ "$AGE" -lt 20 ]; then
+        FAILS=0
+    else
+        RPID=$(cat "$RELAY_PID" 2>/dev/null)
+        echo "$(date): relay dead (heartbeat ${AGE}s, PID $RPID) — restarting" >> "$LOG"
+        ADB_TARGET=""
+        if connect_adb && start_relay; then
+            FAILS=0
         else
-            RPID=$(cat "$RELAY_PID" 2>/dev/null)
-            echo "$(date): relay dead (heartbeat ${AGE}s, PID $RPID) — restarting" >> "$LOG"
-            ADB_TARGET=""
-            if connect_adb; then
-                start_relay || notify_adb_needed
-            else
-                notify_adb_needed
-            fi
+            notify_adb_needed
+            FAILS=$((FAILS + 1))
         fi
     fi
 
-    sleep 1
+    # 연속 실패 5회+ = ADB 장기 불가 → 60s, 20회+ → 300s로 감속 (복구 시 FAILS=0 즉시 정상화)
+    if [ "$FAILS" -ge 20 ]; then
+        sleep 300
+    elif [ "$FAILS" -ge 5 ]; then
+        sleep 60
+    else
+        sleep 15
+    fi
 done

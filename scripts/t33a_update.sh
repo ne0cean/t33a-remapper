@@ -80,8 +80,12 @@ if [ "$CHANGED_SCRIPTS" -gt 0 ]; then
         kill "$OLD_BOOT" 2>/dev/null
         sleep 1
     fi
+    # auto_pull도 재시작 대상 — 죽여두면 새 boot.sh가 pgrep 가드 통과 후 새 버전을 띄움.
+    # (이 스크립트 자신은 cmdline이 t33a_update.sh라 pkill에 안 걸림 — 부모만 고아화되고 계속 실행)
+    pkill -f "t33a_auto_pull" 2>/dev/null
+    sleep 1
     nohup bash "$BOOT_DIR/t33a_boot.sh" < /dev/null >> /sdcard/Download/t33a_boot.log 2>&1 &
-    log "boot.sh 재설치 + watchdog 재시작 (PID $!)"
+    log "boot.sh 재설치 + watchdog·auto_pull 재시작 (PID $!)"
 fi
 
 # [4] relay 통해 데몬 재시작
