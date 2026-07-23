@@ -34,6 +34,8 @@ if [ -f "$WRAPPER" ]; then
     ls "$SHORTCUT_DIR/" 2>/dev/null | while read f; do
         [ "$f" = "T33A" ] && continue
         [ "$f" = "FINAL_SNIPER" ] && continue  # HSC 위젯 보존
+        [ "$f" = "NET_DIAG" ] && continue      # 네트워크 진단 위젯 보존 (2026-07-23)
+        [ "$f" = "termux_ctrl_restart" ] && continue  # 브리지 수동 복구 위젯 보존
         rm -f "$SHORTCUT_DIR/$f"
         echo "$(date): removed shortcut: $f" >> "$LOG"
     done
