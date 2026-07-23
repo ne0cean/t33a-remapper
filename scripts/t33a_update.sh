@@ -88,6 +88,14 @@ if [ "$CHANGED_SCRIPTS" -gt 0 ]; then
     log "boot.sh 재설치 + watchdog·auto_pull 재시작 (PID $!)"
 fi
 
+# [3.7] termux-ctrl-agent 생존 보장 — 죽어 있으면 재기동 (Termux uid 실행 경로 확보)
+# boot 기동 인스턴스는 cmdline에 run 인자 없음 → 'boot/' 경로 패턴으로 탐지 (2026-07-23)
+if [ -f "$HOME/.termux/boot/termux-ctrl-agent.sh" ] && ! pgrep -f 'boot/termux-ctrl-agent' > /dev/null 2>&1; then
+    rm -f /sdcard/Download/termux_ctrl.pid
+    (setsid bash "$HOME/.termux/boot/termux-ctrl-agent.sh" run < /dev/null > /dev/null 2>&1 &)
+    log "ctrl-agent 재기동 (죽어 있었음)"
+fi
+
 # [4] relay 통해 데몬 재시작
 log "데몬 재시작 (relay cmd)..."
 echo "update" > "$CMD"
