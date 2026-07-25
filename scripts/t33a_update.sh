@@ -40,6 +40,11 @@ else
     log "변경: src=${CHANGED_SRC} scripts=${CHANGED_SCRIPTS}"
 fi
 
+# [1.5] last_commit 마커 선기록 — [3.5]의 pkill이 부모 auto_pull을 죽이면
+# auto_pull의 사후 마커 기록이 증발 → "새 커밋" 오판 → 35s 무한 update 루프
+# (2026-07-25 사고: 이틀간 3741회, 매 사이클 데몬 재시작으로 리매핑 간헐 해제)
+[ -n "$REMOTE" ] && echo "$REMOTE" > /sdcard/Download/t33a_last_commit
+
 # [2] C 소스 변경 시 빌드
 if [ "$CHANGED_SRC" -gt 0 ]; then
     log "빌드 시작 (clang)..."
