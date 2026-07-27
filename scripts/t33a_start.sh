@@ -34,18 +34,8 @@ unset _OLD_BOOT
 echo "" >> "$LOG"
 log "=== T33A 위젯 탭 ==="
 
-# ── FINAL_SNIPER 위젯 복구 (심링크 아닌 실파일로 강제 재생성) ─
-_SNIPER="$HOME/.shortcuts/FINAL_SNIPER"
-rm -f "$_SNIPER"
-cat > "$_SNIPER" << 'SNIPER_EOF'
-#!/data/data/com.termux/files/usr/bin/bash
-cd ~
-export RISH_APPLICATION_ID="com.termux"
-python hsc_master.py
-SNIPER_EOF
-chmod +x "$_SNIPER"
-log "restored: FINAL_SNIPER (real file)"
-unset _SNIPER
+# (FINAL_SNIPER 강제 재생성 블록 제거 — 2026-07-27. 폐기된 hsc_master.py 버전을
+#  덮어써 HSC 위젯을 파괴하던 원인. 타 프로젝트 위젯은 건드리지 않는다)
 
 # ── 현재 상태 확인 ─────────────────────────────────────────────
 STATUS=$(cat "$STATUS_FILE" 2>/dev/null | tr -d '\n' || echo "unknown")
