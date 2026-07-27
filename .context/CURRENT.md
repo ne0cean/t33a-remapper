@@ -99,3 +99,5 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **standalone + 재부팅 
 - **2026-04-07**: KEY_H 미동작 해결 — `tap` 매핑 도입.
 - **2026-04-05**: relay 구조 도입. termux-wake-lock. 위젯 fast path.
 - **2026-03-28**: 초기 구현 완료.
+
+- [2026-07-27] 위젯 파괴 인시던트: boot.sh 정리 루프·start.sh FINAL_SNIPER 강제재생성 제거 (타 프로젝트 위젯 소유권 존중). 폰 4경로 배포 완료(SRC·boot·/data/local/tmp·클론)
