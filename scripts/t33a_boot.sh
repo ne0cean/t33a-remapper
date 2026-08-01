@@ -77,6 +77,12 @@ connect_adb() {
         fi
     fi
 
+    # 진단: 왜 loopback이 실패했나 — unauthorized(인증 대기)·offline(포트 죽음)·refused(미listen) 구분.
+    # 블라인드 "toggle needed" 대신 실제 원인을 남겨야 다음 재부팅에서 진범을 안다.
+    CMSG=$("$ADB" connect "localhost:$PORT" 2>&1 | tr -d '\r')
+    DSTATE=$("$ADB" devices 2>/dev/null | grep "localhost:$PORT" | awk '{print $2}')
+    echo "$(date): connect_adb 실패 — connect:[$CMSG] state:[${DSTATE:-none}] (unauthorized=폰 '무선 디버깅 허용' 탭 필요·offline=adbd 미listen·없음=포트 자체 없음)" >> "$LOG"
+
     ADB_TARGET=""
     return 1
 }
@@ -107,6 +113,26 @@ notify_adb_needed() {
 # Termux 유저의 system binary 실행은 기기/버전에 따라 경로가 달라 다중 프로브로 탐지.
 SETTINGS_CMD=""
 _WADB_DEAD=""
+_WADB_PKG=com.ateam.wadbkeeper
+_KICK_TS=0
+# 무선 디버깅 강제 ON — Termux CLI(settings/cmd)는 SELinux 무음 차단이라 WADB Keeper 앱
+# (ContentResolver)만 실효. UI 없는 explicit broadcast로 BootReceiver를 깨운다.
+# BOOT_COMPLETED는 보호된 broadcast(비system 발신 거부) → 커스텀 액션 + 명시 컴포넌트로 우회
+# (리시버는 액션 무관하게 adb_wifi_enabled=1 세팅). am이 Termux uid서 막히면 best-effort(로그만).
+# 60s 스로틀 — watchdog 매 틱 호출돼도 am 폭주 방지.
+_kick_wadb_keeper() {
+    NOW=$(date +%s)
+    [ $((NOW - _KICK_TS)) -lt 60 ] && return
+    _KICK_TS=$NOW
+    for AM in am /system/bin/am; do
+        if $AM broadcast -n "$_WADB_PKG/.BootReceiver" -a com.ateam.wadbkeeper.KICK >/dev/null 2>&1; then
+            echo "$(date): WADB Keeper 앱 broadcast — 무선 디버깅 강제 ON 시도" >> "$LOG"
+            return 0
+        fi
+    done
+    echo "$(date): WADB Keeper 앱 킥 실패 (am 미가용) — 잠금해제 후 '무선 디버깅 허용' 탭 필요" >> "$LOG"
+    return 1
+}
 _detect_settings() {
     for c in \
         "settings" \
@@ -126,7 +152,8 @@ _detect_settings() {
     return 1
 }
 enable_wireless_adb() {
-    [ -n "$_WADB_DEAD" ] && return 1
+    # CLI 경로가 죽었어도 앱 킥으로 강제 ON 재시도 — 무선 디버깅 꺼지면 무조건 켠다.
+    [ -n "$_WADB_DEAD" ] && { _kick_wadb_keeper; return 1; }
     if [ -z "$SETTINGS_CMD" ]; then
         if ! _detect_settings; then
             echo "$(date): enable_wireless_adb 사용 불가 — 모든 settings 실행경로 실패 (이 세션에서 재시도 안 함)" >> "$LOG"
@@ -143,6 +170,7 @@ enable_wireless_adb() {
         return 0
     fi
     echo "$(date): settings put 실패 — WRITE_SECURE_SETTINGS 미부여? ($(echo "$ERR" | head -1))" >> "$LOG"
+    _kick_wadb_keeper   # CLI 실패 → 앱 컨텍스트로 강제 ON
     return 1
 }
 
@@ -252,9 +280,11 @@ while true; do
         fi
     fi
 
-    # 연속 실패 5회+ = ADB 장기 불가 → 60s, 20회+ → 300s로 감속 (복구 시 FAILS=0 즉시 정상화)
+    # 연속 실패 5회+ = ADB 장기 불가 → 60s, 20회+ → 120s로 감속 (복구 시 FAILS=0 즉시 정상화)
+    # 120s 상한: 재시도 폭풍(15s)은 막되, ADB 복귀 시 복구 지연을 300s→120s로 단축
+    #   (2026-08-01 실측: 300s 구간이라 loopback 복귀 후에도 relay 3분 지연 복구).
     if [ "$FAILS" -ge 20 ]; then
-        sleep 300
+        sleep 120
     elif [ "$FAILS" -ge 5 ]; then
         sleep 60
     else
