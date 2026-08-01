@@ -1,5 +1,5 @@
 PROJECT: t33a-remapper
-TASK: WADB Keeper APK — 재부팅 후 무선 디버깅 자동 ON (e2e PASS, PC-less 복구 달성)
-STATUS: 배포됨 (daemon Running, 커밋 push 완료)
-NEXT: 실제 재부팅 테스트 (adb reboot → 잠금해제 1회 → 리모컨 확인)
-BRANCH: main | LAST: 51e52a5 [feat]: WADB Keeper
+TASK: 재부팅 후 키 미동작 인시던트 근본수리 — 무선ADB 꺼지면 앱 broadcast로 강제 ON + 복구 지연 단축 (커밋 daadaed)
+STATUS: 코드 수리·push 완료, 폰 배포/실재부팅 e2e 대기 (리모컨 회사 소재)
+NEXT: 리모컨 복귀 시 새 boot.sh 폰 배포 + adb reboot e2e(Termux uid broadcast 검증) + adb "항상 허용" 1회
+BRANCH: main | LAST: cd1577f [docs]: 재부팅 인시던트 근본원인 기록
