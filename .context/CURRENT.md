@@ -2,7 +2,7 @@
 
 ## ✅ REALITY 재정정 (2026-07-10) — WADB Keeper로 "재부팅 후 PC 없이 자동 복구" 달성
 2026-06-27 "구조적 불가능" 판정의 전제(Termux가 무선 디버깅 못 켬)가 깨짐. `helper-apk/` **WADB Keeper**(자체 빌드 3.9KB APK, WRITE_SECURE_SETTINGS)가 BOOT_COMPLETED에서 `adb_wifi_enabled=1` → boot.sh loopback 복구 체인 정상 작동. 실기기 e2e PASS(강제 OFF→자동 재활성화). 재부팅 후 사용자 액션 = **잠금해제 1회뿐**. Mac launchd USB 경로는 백업으로 유지. 상세: `helper-apk/README.md`, CLAUDE.md REALITY 섹션.
-**⚠️ 실제 재부팅 테스트 미실시** — e2e는 강제 OFF 시뮬레이션으로만 검증됨 (Next Tasks 0번).
+**🔴 2026-08-01 실제 재부팅에서 실패 확정** — 그 "e2e PASS"는 mDNS `_adb-tls-connect` 재등장만 봤지 **실제 loopback `adb connect`+shell을 한 번도 검증 안 함**. 실재부팅(12:50) 후 무선ADB loopback 미기동 → boot.sh가 relay 못 띄움 → **데몬 7h 사망 → 리모컨 키 인터셉트 안 됨(원래 기능 통과)**. 19:45 무선디버깅 수동 토글로 겨우 복구. 근본원인 3중: ①WADB Keeper는 TLS 플래그만 세팅(boot.sh가 기대하는 classic 5555 아님, TLS는 페어링 필수) ②재부팅 시 adb 인증 리셋('허용' 탭 전 loopback 거부) ③복구 backoff 300s 지연. → **수리 커밋 `daadaed`** (아래 Recent Activity), 폰 배포·실검증 대기.
 
 ## 📌 프로젝트 1줄
 T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **standalone + 재부팅 자동 복구(잠금해제 1회)**.
@@ -48,7 +48,8 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **standalone + 재부팅 
 - 원인: relay 25초 주기 사망 시 daemon도 같이 죽었던 구조 → 픽스로 해소
 
 ## ⏩ Next Tasks
--1. **🔬 검증 대기 — WADB Keeper 실제 재부팅 테스트** (2026-07-10): `adb reboot` → 잠금해제 1회 → ~2분 내 리모컨 작동 확인. 성공 시 boot.log에 loopback 연결 + logcat `WADBKeeper: boot: adb_wifi_enabled=1 set OK`. 실패 시 폴백 = 무선 디버깅 수동 토글 또는 USB.
+-2. **🚀 배포+검증 대기 — 2026-08-01 수리 커밋 `daadaed`** (리모컨/폰 있을 때): ①새 `scripts/t33a_boot.sh`를 폰에 배포(규칙 #3: 검증하며) ②`adb reboot` → 잠금해제 → boot.log에서 `WADB Keeper 앱 broadcast` + loopback 연결 확인(Termux uid서 am broadcast 통하는지가 핵심 미검증) ③**adb "이 컴퓨터에서 항상 허용" 1회 체크**(근본원인 #2, 재부팅 인증 리셋 방어). broadcast 메커니즘 자체는 shell uid서 검증됨(result=0, logcat OK).
+-1. ~~WADB Keeper 실제 재부팅 테스트~~ → **🔴 실패 확정** (위 REALITY 참조). 위 -2로 대체.
 0. **🔬 검증 대기 — 재부팅 콜드패스 풀체인** (2026-06-27): `t33a-auto-tcpip.sh` 신버전(복구폴링 포함)이 *실제 재부팅*에서 안 돌아봄. 다음 재부팅 시 `/tmp/t33a-tcpip.log` 확인 → 성공=`✅ 복구 확인(status=active)` + macOS 알림. **주의: 재부팅 8분 내 PC 꽂으면** Termux:Boot 지연으로 `⚠️ 위젯 1회 탭` 뜸(버그 아님, graceful degrade). 8분 후 꽂으면 풀체인 정상. tcpip 자동활성/이미-tcp 복구알림 경로는 검증됨(19:25·19:57 로그).
 1. ~~**재부팅 후 자동 복구 실측**~~ ✅ **완료 (2026-06-20)** — 재부팅 후 위젯 탭으로 복구 확인. tcpip 5555 재부팅 생존 확인. USB 불필요.
 2. **컨틴전시 설계** — 진짜 위험은 "폰 쪽"(이번 고장 전부 폰). 여분 BLE 리모컨은 공짜 보험이나 약한 고리(리모컨 물리고장만 커버). 폰 컨틴전시 = 여분 기기 필요(이상적으론 루팅한 별도 기기 = 본체 안 건드림 + 삼성OS 독립 고장 + 견고). **단 같은 폰 루팅은 와이프되므로 불가, 반드시 별도 기기.** 여분 리모컨은 같은 모델이면 지금 페어링만, 다른 모델이면 키코드 추출+config 매핑(`lesson_t33a_key_mapping_oneshot`)
@@ -72,6 +73,7 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **standalone + 재부팅 
 8. **Termux 유저는 shell 유저의 `/proc/PID`를 볼 수 없음** — `boot.sh` watchdog에서 PID 존재 확인 시 `/proc` 대신 heartbeat 파일(`t33a.heartbeat`)의 수정 시간을 사용해야 함.
 
 ## 📝 Recent Activity
+- **2026-08-01**: **재부팅 후 키 미동작 인시던트 근본수리** (커밋 `daadaed`). 진단: 리모컨 부재 상태 라이브 프로브로 오판("BLE 고장")했다가, boot.log/heartbeat mtime/tcpip log로 정정 — 실재부팅(12:50) 후 무선ADB loopback 미기동 → 데몬 7h 사망 → 키 통과. 수리 `scripts/t33a_boot.sh` 3건: ①`enable_wireless_adb`가 CLI(SELinux 차단) 실패 시 **WADB Keeper 앱 broadcast로 강제 ON**(60s 스로틀, watchdog 매 틱=꺼지면 무조건 켬 — broadcast는 shell uid서 result=0+logcat 검증) ②connect_adb 실패 원인 로깅(unauthorized/offline/refused) ③backoff 300→120s. + Mac `~/bin/t33a-auto-tcpip.sh` 복구 폴링 30s→140s(폰 backoff 상한 맞춤, launchd 재기동 반영). 멘토 레슨 #13 저장(과거/부재-트리거 인시던트는 라이브 프로브 전 로그부터). **폰 배포·실재부팅 e2e는 리모컨 있을 때(Next -2).**
 - **2026-06-27**: **세션 복구 + REALITY 정정 커밋**. 리셋(컨텍스트 종료)으로 끊긴 세션 복구 — 작업물 손실 0(전부 디스크). 이전 세션 산출물 = "PC 연결만으로 즉시 자동복구" 대안(`~/bin/t33a-auto-tcpip.sh` 풀체인 + launchd `com.ateam.t33a-tcpip`)이 미커밋이던 것을 커밋(`4c22a15` 정정 + `58f9426` 검증마커). 라이브 점검: tcp:5555·status=active·relay_hb age 1s 정상. 콜드패스 풀체인만 다음 재부팅 시 `/tmp/t33a-tcpip.log` 자기검증 대기(Next Tasks #0).
 - **2026-06-06 (2차)**: **`/debrief` 스킬 구현** — 복잡한 세션 후 학습 추출/정리/Pre-flight Gate 자동화. GitHub 리서치(session-retrospective, dream-skill, clean-up) + 오늘 T33A 교훈 반영. `~/.claude/commands/debrief.md` 글로벌 등록. `/end` Step 6.74 트리거 연동. 레슨 2개 추가: relay_hb stale, 공유 디렉토리 ls.
 - **2026-06-06**: **standalone 구조 복구 + 워치독 강화** (2026-06-06)

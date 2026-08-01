@@ -5,6 +5,24 @@
 
 ---
 
+## [2026-08-01] 재부팅 후 키 미동작 인시던트 — 근본수리 (커밋 daadaed)
+
+**상황**: 사용자 "재부팅 후 키가 또 안 먹네, 자동복구된다며?" 회사에서 리모컨은 원래 기능대로 동작하는데 리매퍼만 안 됨.
+
+**진단 오판→정정**: 리모컨 부재(회사) 상태의 라이브 프로브(BLE disconnected·no input device)로 "리매퍼 정상, BLE 고장" 단정 → 사용자 "로그도 확인 안 해?" 교정 → boot.log/heartbeat mtime/tcpip log 확인하니 **정반대**. 실재부팅(12:50, uptime 7.4h) 후 무선ADB loopback 미기동 → boot.sh가 relay 못 띄움 → 데몬 7h 사망(heartbeat 07:20 동결) → 리모컨 키 인터셉트 없이 원래 기능 통과. 19:45 무선디버깅 수동 토글로 겨우 복구.
+
+**근본원인 3중**: ①WADB Keeper는 `adb_wifi_enabled`(TLS) 플래그만 세팅 — boot.sh가 기대하는 classic 5555 아님, TLS는 페어링 필수. ②재부팅 시 adb 인증 리셋 → '허용' 탭 전 loopback 거부. ③복구 backoff 300s 지연. + "e2e PASS"(2026-07-10)는 mDNS 재등장만 봤고 실제 loopback connect 미검증.
+
+**수리** (`scripts/t33a_boot.sh`, `~/bin/t33a-auto-tcpip.sh`):
+- enable_wireless_adb: CLI(SELinux 차단) 실패 시 WADB Keeper 앱 broadcast로 강제 ON(커스텀 액션+명시 컴포넌트, 60s 스로틀, watchdog 매 틱=꺼지면 무조건 켬)
+- connect_adb 실패 원인 로깅(unauthorized/offline/refused)
+- backoff 상한 300→120s
+- Mac 복구 폴링 30s→140s(폰 backoff 맞춤)
+
+**검증**: broadcast 메커니즘 shell uid서 `result=0`+logcat `WADBKeeper: adb_wifi_enabled=1 set OK`. bash -n 양 스크립트 PASS. **폰 배포·실재부팅 e2e·Termux uid broadcast·adb always-allow는 리모컨 있을 때 대기(CURRENT.md Next -2).**
+
+**이슈**: 진단 초기 라이브 프로브 오판(멘토 레슨 #13 저장). **빌드**: ✅ (문법·메커니즘 검증, 실기기 e2e 대기)
+
 ## [2026-06-27] 세션 복구 + REALITY 정정 커밋 + 콜드패스 검증 마커
 
 **상황**: 컨텍스트 윈도우 종료(리셋)로 끊긴 세션 복구. RESUME.md/zzz 흔적 없음 → 작업물 손실 아님(전부 디스크). 끊긴 작업 = "ADB 의존 불가피 인정 → 최소한 PC 연결만으로 즉시 복구하는 대안 제시" 요구의 산출물이 미커밋 상태였음.
