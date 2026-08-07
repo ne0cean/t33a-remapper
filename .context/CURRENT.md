@@ -8,6 +8,7 @@
 - **수리**: boot.sh `ensure_bluetooth_on()` — ADB loopback(shell uid) 재활용, `svc bluetooth enable`, 60s 스로틀. startup + watchdog 재시작 2지점 배선(무선디버깅과 달리 삼성이 런타임 BT 임의 OFF 안 하므로 재부팅/재시작 1회면 충분).
 - **e2e 완전 검증**: BT off + relay kill(재부팅 모사) → 배포된 watchdog가 relay 복구+매핑5로드+`bluetooth re-enabled (0→1)` 로그까지 자동. 폰 auto_pull(24s)로 `~/.termux/boot` 갱신+watchdog 재시작 완료.
 - **미검증(리모컨 부재)**: 실제 키 인터셉트(리모컨 버튼→매핑→탭). `/dev/input` 직전까지 배선 전부 증명됨 → 리모컨 재연결 시 5매핑 즉시 적용. **다음: 실재부팅(BT off 부팅) e2e**로 startup 경로의 BT ON 최종 확인(현재는 watchdog 경로만 실증).
+- **/review 반영 (커밋 `85782f6`)**: review-pr HIGH — BT off와 relay 사망은 독립 실패인데 두 BT-enable 지점이 모두 relay 재기동에 게이트됨. boot.sh 재실행(update.sh 재시작 실측) 시 relay 생존이면 BT 확인 누락. startup relay-alive-skip 분기에 `connect_adb && ensure_bluetooth_on` 추가로 폐쇄. MEDIUM(date 빈값 가드)·LOW(start_relay 반환 체크)는 기각(전자=비일관·Termux는 GNU date, 후자=BT enable은 relay 성공과 독립이 더 옳음). skip-path 직접 e2e는 Termux-uid boot.sh 재실행 필요(다음 배포/재부팅 자연발생) — 구성 함수 connect_adb·ensure_bluetooth_on은 16:37 watchdog e2e로 이미 실증.
 
 ## ✅ REALITY 재정정 (2026-07-10) — WADB Keeper로 "재부팅 후 PC 없이 자동 복구" 달성
 2026-06-27 "구조적 불가능" 판정의 전제(Termux가 무선 디버깅 못 켬)가 깨짐. `helper-apk/` **WADB Keeper**(자체 빌드 3.9KB APK, WRITE_SECURE_SETTINGS)가 BOOT_COMPLETED에서 `adb_wifi_enabled=1` → boot.sh loopback 복구 체인 정상 작동. 실기기 e2e PASS(강제 OFF→자동 재활성화). 재부팅 후 사용자 액션 = **잠금해제 1회뿐**. Mac launchd USB 경로는 백업으로 유지. 상세: `helper-apk/README.md`, CLAUDE.md REALITY 섹션.
