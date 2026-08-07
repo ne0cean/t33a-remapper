@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-08-07T07:43:33.094Z",
+  "subagent_input": {
+    "session_id": "a772a58e-1b66-4182-ab24-7cae9a52f020",
+    "transcript_path": "/Users/noir/.claude/projects/-Users-noir-Projects-connectome-flair-workers-ig-avatar/a772a58e-1b66-4182-ab24-7cae9a52f020.jsonl",
+    "cwd": "/Users/noir/Projects/t33a-remapper",
+    "permission_mode": "bypassPermissions",
+    "agent_id": "ace40e6ea70623643",
+    "agent_type": "review-pr",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "SubagentStop",
+    "stop_hook_active": false,
+    "agent_transcript_path": "/Users/noir/.claude/projects/-Users-noir-Projects-connectome-flair-workers-ig-avatar/a772a58e-1b66-4182-ab24-7cae9a52f020/subagents/agent-ace40e6ea70623643.jsonl",
+    "last_assistant_message": "Phase 2-5 분석 완료. 보고한다.\n\n---\n\n## Pre-Landing 리뷰 결과\n\n**범위**: CLEAN (`.context/CURRENT.md` + `scripts/t33a_boot.sh` 2파일, 37줄 추가 — 의도 일치)\n\nSemgrep 미설치 — `pip install semgrep` 권장\n\n**이슈**: 3개 (CRITICAL 0, HIGH 1, MEDIUM 1, LOW 1)\n\n---\n\n### [HIGH] 스로틀 변수 `_BT_TS`가 startup \"relay already alive\" 경로에서 초기화 안 됨\n\n**위치**: `scripts/t33a_boot.sh:255-256` (startup skip 분기) + `:232-248` (함수 정의)\n\n**근거**:\n\n```\n[startup 분기]\n  +-- relay already alive (hb age < 30s)  ← 이 분기에서 ensure_bluetooth_on 호출 없음\n  |     → _BT_TS = 0 (초기값)\n  +-- relay not alive → start_relay → ensure_bluetooth_on 호출  [OK]\n\n[watchdog 첫 틱 — 재부팅 후 relay alive 경우]\n  AGE < 20 → else 브랜치 미진입 → ensure_bluetooth_on 호출 없음\n```\n\n재부팅 시나리오 중 **relay가 15-30초 사이에 이미 살아있는 상태로 boot.sh가 뒤늦게 실행되면** (Termux:Boot 지연), startup `if [ \"$_HB_Q_AGE\" -lt 30 ]` 분기로 진입해 BT 확인이 완전히 건너뛰어진다. `_BT_TS=0`이라 다음 watchdog 틱에서 스로틀은 통과하겠지만, 그 틱은 `AGE < 20`(relay alive) 이므로 else 브랜치가 발동하지 않아 여기서도 호출이 없다.\n\n**결론**: relay가 boot.sh보다 빠르게 올라온 경우, watchdog이 relay를 죽음으로 감지하기 전까지 (relay_hb TTL 20s 초과) BT 확인이 이루어지지 않는다. 최악 케이스 지연 ≈ 20s.\n\n**실용적 위험도**: relay가 boot.sh보다 항상 빠르게 뜨는지 여부에 달려 있다. 현재 구조(boot.sh → ADB → relay 기동)에서는 정상 부팅 경로라면 relay는 boot.sh가 직접 띄우므로 이 경로는 **watchdog 재시작 시** 발생 가능성이 높다. 단, 스크립트 주석(`relay가 이미 살아있으면 시작 루프 스킵 (watchdog 재시작 시 즉시 진입)`)에 따르면 이 경로가 실제 의도된 케이스다.\n\n**수정안**: startup의 \"relay already alive\" 분기에도 `ensure_bluetooth_on` 1회 추가, 또는 watchdog 루프의 `AGE < 20` 정상 분기(FAILS=0 재설정 직전)에서도 호출.\n\n```sh\nif [ \"$_HB_Q_AGE\" -lt 30 ]; then\n    echo \"$(date): relay already alive (hb age ${_HB_Q_AGE}s) — skipping startup\" >> \"$LOG\"\n    ensure_bluetooth_on   # relay skip 경로에서도 BT 1회 확인\nelse\n```\n\n---\n\n### [MEDIUM] `date +%s` 기반 스로틀의 Bash산술 unquoted 변수\n\n**위치**: `scripts/t33a_boot.sh:235`\n\n```sh\n[ $((NOW - _BT_TS)) -lt 60 ] && return 0\n```\n\n`NOW`는 `$(date +%s)` 출력이고, `date +%s`가 빈 문자열을 반환하는 환경(busybox date 등)에서 `$((NOW - _BT_TS))`는 `$(( - 0))`이 되어 음수 → `-lt 60` true → 스로틀이 영구 잠김. 이 스크립트는 Termux bash(`#!/data/data/com.termux/files/usr/bin/bash`)이고 GNU date가 있으므로 현실 위험은 낮지만, 방어적으로:\n\n```sh\nNOW=$(date +%s 2>/dev/null)\n[ -z \"$NOW\" ] && NOW=0\n```\n\n또는 `_BT_TS`와 동일하게 초기화 0으로 두면 `NOW=0` 시 `$((0-0))=0 < 60` → 스로틀 잠김이 여전하다. 실질적으로는 `date +%s`가 빈값 반환 시 스로틀이 잠기는 것보다 BT enable이 1회 추가 호출되는 쪽이 더 안전하므로, 빈값 시 스로틀 해제(`NOW=0` → `$((0-0))=0`이 아닌 큰 값 할당)로 처리하는 것이 낫다.\n\n---\n\n### [LOW] `start_relay` 반환값 미체크 후 `ensure_bluetooth_on` 호출 — startup 경로\n\n**위치**: `scripts/t33a_boot.sh:270-271`\n\n```sh\nstart_relay\nensure_bluetooth_on\n```\n\nwatchdog 경로(`connect_adb && start_relay`)는 `&&`로 묶여 `start_relay` 실패 시 `ensure_bluetooth_on`을 호출하지 않는다. 반면 startup 경로는 `start_relay`가 실패해도 무조건 `ensure_bluetooth_on`을 호출한다. relay 기동 실패 후 BT를 켜봐야 T33A 재연결은 되지 않으므로 의미 없는 호출이다.\n\n두 호출 지점의 동작이 비대칭이라 향후 로그 해석 시 혼동 가능. 기능 블로커는 아니다.\n\n**수정안**:\n\n```sh\nif start_relay; then\n    ensure_bluetooth_on\nfi\n```\n\n---\n\n### 검토 포인트 별 결론\n\n| # | 항목 | 판정 |\n|---|---|---|\n| 1 | 셸 안전성 (변수 인용, 에러처리, ADB_TARGET 방어) | OK — `[ -z \"$ADB_TARGET\" ]`, `2>/dev/null`, `tr -d '\\r'` 모두 정상. `\"$ADB\" -s \"$ADB_TARGET\"` 인용 올바름 |\n| 2 | 자가복구 흐름 파괴 여부 | **HIGH 이슈 참조** — startup \"relay alive skip\" 경로에서 BT 미확인 |\n| 3 | CLAUDE.md 절대금지 위반 | CLEAN — loopback 구조 건드리지 않고 `\"$ADB\" -s \"$ADB_TARGET\"` 재활용, `~/.shortcuts`에 T33A 외 파일 touch 없음 |\n| 4 | 60s 스로틀 재부팅 동작 | startup 1회(BT OFF→켬, `_BT_TS` 갱신) 후 60s 내 watchdog 진입 시 skip — 의도대로 동작. 단 HIGH 이슈 경로는 예외 |\n| 5 | 배터리/성능 비용 | watchdog 정상 틱(relay alive)에서 `ensure_bluetooth_on` 미호출 — 비용 없음. relay 재시작 시만 호출(매 15~120s 중 재시작 발생 시에만) + 60s 스로틀로 adb shell 2회 최대 60s당 1회 — 허용 범위 |\n\n---\n\n**완료**: DONE_WITH_CONCERNS\n\nHIGH 이슈(startup relay-alive-skip 경로 BT 미확인)는 재부팅 직후 relay가 이미 살아있는 케이스에서 BT 확인이 누락되는 구조적 틈새다. e2e 실측은 \"relay 죽은 상태 → 재시작\" 경로를 검증했으므로 이 경로는 미검증 상태다. 병합 전 startup 분기에 `ensure_bluetooth_on` 1줄 추가를 권장한다.",
+    "background_tasks": [],
+    "session_crons": []
+  },
+  "changed_files": [],
+  "changed_count": 0,
+  "status": "clean",
+  "phase": "unknown",
+  "resume_prompt": "/pickup"
+}
