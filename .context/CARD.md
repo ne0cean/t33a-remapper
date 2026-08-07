@@ -1,5 +1,5 @@
 PROJECT: t33a-remapper
-TASK: 재부팅 후 키 미동작 인시던트 근본수리 — 무선ADB 꺼지면 앱 broadcast로 강제 ON + 복구 지연 단축 (커밋 daadaed)
-STATUS: 코드 수리·push 완료, 폰 배포/실재부팅 e2e 대기 (리모컨 회사 소재)
-NEXT: 리모컨 복귀 시 새 boot.sh 폰 배포 + adb reboot e2e(Termux uid broadcast 검증) + adb "항상 허용" 1회
-BRANCH: main | LAST: cd1577f [docs]: 재부팅 인시던트 근본원인 기록
+TASK: "리매퍼 미동작" 진단 → 실원인=재부팅 후 폰 BT off(리매퍼 무죄). boot.sh ensure_bluetooth_on() 3지점 배선 + /review HIGH(startup-skip) 폐쇄. e2e watchdog경로 PASS
+STATUS: 코드·push 완료(f15fc3d·85782f6). 생재부팅 콜드패스+물리 키 인터셉트만 미검증(리모컨 부재)
+NEXT: 리모컨+폰 물리접근 시 adb reboot→잠금해제→boot.log 'bluetooth re-enabled' 확인→리모컨 버튼→앱 반응 (10분 완결)
+BRANCH: main | LAST: 2fb94a2 [docs]: /review HIGH 반영 기록

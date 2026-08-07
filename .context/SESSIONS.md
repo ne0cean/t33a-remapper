@@ -5,6 +5,22 @@
 
 ---
 
+## [2026-08-07] "리매퍼 미동작" 진단 → BT 자동 ON 수리 (커밋 f15fc3d·85782f6)
+
+**상황**: 사용자 "리매퍼 재부팅 후 아직도 작동 안 함". 리모컨 부재로 배선 점검 요청.
+
+**진단**(레슨 #13대로 로그부터): 폰(192.168.0.18:5555) 라이브 프로브 — 데몬 heartbeat 15s·relay 생존·매핑5 로드·TCP5555·자가복구 체인 오늘 15:50~51 실제 작동(`daadaed` 수리 발효 실증). **소프트웨어 전부 정상, 지난 "데몬 사망" 재발 안 함**. 실제 원인 = **폰 BT가 재부팅 후 OFF**(`bluetooth_on=0`) → T33A(BLE HID) 재연결 불가 → `/dev/input`에 리모컨 없음 → 데몬 `waiting:no_device`. 리매퍼 무죄.
+
+**검증 중 결함후보 2개 → 오탐 기각**: ①낡은 `/sdcard/Download/t33a.conf`(매핑2 누락) — 데몬은 소스 `#define`대로 `/data/local/tmp/t33a.conf`만 읽음(git과 identical). ②WADB broadcast 63초 반복 — 삼성 무선디버깅 방어(60s 스로틀), 의도된 설계.
+
+**수리**: boot.sh `ensure_bluetooth_on()` — ADB loopback(shell uid) 재활용, `svc bluetooth enable`, 60s 스로틀. 3지점 배선(startup-else + startup-skip + watchdog 재시작). `svc bluetooth`는 shell uid만 가능(Termux uid SELinux 차단, 무선ADB와 동일 제약).
+
+**/review HIGH 반영**(85782f6): BT-off와 relay-death는 독립 실패인데 BT-enable이 relay 재기동에만 게이트됨 → boot.sh 재실행+relay 생존 시 BT 확인 누락. startup-skip 분기에 `connect_adb && ensure_bluetooth_on` 추가로 폐쇄. MEDIUM·LOW는 근거 기각.
+
+**e2e**: BT off+relay kill(재부팅 모사) → 배포된 watchdog가 `relay OK→loaded 5→bluetooth re-enabled 0→1` 전 시퀀스 자동(16:37 로그). 폰 auto_pull(24s)로 `~/.termux/boot` 갱신+watchdog 재시작. **미검증**(리모컨 부재): 생재부팅 콜드패스 전체 + 물리 키 인터셉트 → 리모컨+폰 물리접근 시 10분 완결(CURRENT.md Next).
+
+**빌드**: ✅ (셸 9종 bash -n 통과, C 데몬 미변경)
+
 ## [2026-08-01] 재부팅 후 키 미동작 인시던트 — 근본수리 (커밋 daadaed)
 
 **상황**: 사용자 "재부팅 후 키가 또 안 먹네, 자동복구된다며?" 회사에서 리모컨은 원래 기능대로 동작하는데 리매퍼만 안 됨.
