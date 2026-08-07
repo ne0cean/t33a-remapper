@@ -1,5 +1,14 @@
 # Current Status
 
+## ✅ 2026-08-07 — "리매퍼 미동작" 진단→BT 자동 ON 수리 (커밋 `f15fc3d`)
+사용자 "재부팅 후 아직도 작동 안 함" 신고. 레슨 #13(부재/과거 트리거는 라이브 프로브 전 로그부터)대로 폰(192.168.0.18:5555) 로그부터 진단.
+- **소프트웨어 스택 전부 정상**: 데몬 heartbeat 15s·relay 생존·매핑 5개 로드·TCP 5555·자가복구 체인 오늘 15:50~51 실제 작동(`daadaed` 수리 발효 실증). 지난 "데몬 사망" 인시던트 **재발 안 함**.
+- **실제 원인 = 폰 BT가 재부팅 후 OFF**(`bluetooth_on=0`) → T33A(BLE HID) 재연결 불가 → `/dev/input`에 리모컨 없음 → 데몬 `waiting:no_device`. 리매퍼는 무죄.
+- **검증 중 "결함 후보" 2개 → 둘 다 오탐 기각**: ①낡은 `/sdcard/Download/t33a.conf`(매핑 2개 누락) — 데몬은 `/data/local/tmp/t33a.conf`만 읽음(소스 `#define`), 잔재 파일. ②WADB broadcast 63초 반복 — 삼성 무선디버깅 임의 OFF 방어(60s 스로틀), 의도된 설계.
+- **수리**: boot.sh `ensure_bluetooth_on()` — ADB loopback(shell uid) 재활용, `svc bluetooth enable`, 60s 스로틀. startup + watchdog 재시작 2지점 배선(무선디버깅과 달리 삼성이 런타임 BT 임의 OFF 안 하므로 재부팅/재시작 1회면 충분).
+- **e2e 완전 검증**: BT off + relay kill(재부팅 모사) → 배포된 watchdog가 relay 복구+매핑5로드+`bluetooth re-enabled (0→1)` 로그까지 자동. 폰 auto_pull(24s)로 `~/.termux/boot` 갱신+watchdog 재시작 완료.
+- **미검증(리모컨 부재)**: 실제 키 인터셉트(리모컨 버튼→매핑→탭). `/dev/input` 직전까지 배선 전부 증명됨 → 리모컨 재연결 시 5매핑 즉시 적용. **다음: 실재부팅(BT off 부팅) e2e**로 startup 경로의 BT ON 최종 확인(현재는 watchdog 경로만 실증).
+
 ## ✅ REALITY 재정정 (2026-07-10) — WADB Keeper로 "재부팅 후 PC 없이 자동 복구" 달성
 2026-06-27 "구조적 불가능" 판정의 전제(Termux가 무선 디버깅 못 켬)가 깨짐. `helper-apk/` **WADB Keeper**(자체 빌드 3.9KB APK, WRITE_SECURE_SETTINGS)가 BOOT_COMPLETED에서 `adb_wifi_enabled=1` → boot.sh loopback 복구 체인 정상 작동. 실기기 e2e PASS(강제 OFF→자동 재활성화). 재부팅 후 사용자 액션 = **잠금해제 1회뿐**. Mac launchd USB 경로는 백업으로 유지. 상세: `helper-apk/README.md`, CLAUDE.md REALITY 섹션.
 **🔴 2026-08-01 실제 재부팅에서 실패 확정** — 그 "e2e PASS"는 mDNS `_adb-tls-connect` 재등장만 봤지 **실제 loopback `adb connect`+shell을 한 번도 검증 안 함**. 실재부팅(12:50) 후 무선ADB loopback 미기동 → boot.sh가 relay 못 띄움 → **데몬 7h 사망 → 리모컨 키 인터셉트 안 됨(원래 기능 통과)**. 19:45 무선디버깅 수동 토글로 겨우 복구. 근본원인 3중: ①WADB Keeper는 TLS 플래그만 세팅(boot.sh가 기대하는 classic 5555 아님, TLS는 페어링 필수) ②재부팅 시 adb 인증 리셋('허용' 탭 전 loopback 거부) ③복구 backoff 300s 지연. → **수리 커밋 `daadaed`** (아래 Recent Activity), 폰 배포·실검증 대기.
