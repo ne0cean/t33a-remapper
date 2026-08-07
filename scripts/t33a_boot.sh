@@ -254,6 +254,10 @@ _HB_Q=/data/local/tmp/t33a.relay_hb
 _HB_Q_AGE=$(( $(date +%s) - $(stat -c %Y "$_HB_Q" 2>/dev/null || echo 0) ))
 if [ "$_HB_Q_AGE" -lt 30 ]; then
     echo "$(date): relay already alive (hb age ${_HB_Q_AGE}s) — skipping startup" >> "$LOG"
+    # relay는 살았어도 BT는 꺼진 채일 수 있음(BT off와 relay 사망은 독립 실패).
+    # startup·watchdog 재시작 경로가 둘 다 relay 재기동에 게이트돼 있어, boot.sh 재실행 시
+    # relay 생존이면 BT 확인이 완전히 누락됨. loopback 잡고 1회 확인해 이 틈새를 닫는다.
+    connect_adb && ensure_bluetooth_on
 else
     # TCP 루프백 ADB로 relay 시작 (PRIMARY — 외부 앱 의존 0, 폰 내장 adbd)
     echo "$(date): starting relay via ADB loopback (self-contained)..." >> "$LOG"
