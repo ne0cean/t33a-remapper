@@ -221,6 +221,32 @@ start_relay() {
     _relay_check_start
 }
 
+# ── 블루투스 자동 ON ──────────────────────────────────────────
+# 재부팅 시 OS가 BT를 끈 채 부팅하면 T33A(BLE HID) 재연결 불가 → 키 미동작(데몬은 정상).
+# svc bluetooth는 shell 유저(uid=2000)만 가능 — Termux uid는 SELinux 차단(무선ADB와 동일).
+# → 이미 세운 ADB loopback(ADB_TARGET) 재활용. 무선디버깅과 달리 삼성이 런타임에 임의로
+#   끄지 않으므로 재부팅/relay 재시작 시점 1회 확인이면 충분. 60s 스로틀로 중복 방어.
+# (2026-08-07 실측: 재부팅 후 bluetooth_on=0 → T33A 재연결 불가가 미동작 실제 원인.
+#  svc bluetooth enable을 shell uid로 실증 rc=0.)
+_BT_TS=0
+ensure_bluetooth_on() {
+    [ -z "$ADB_TARGET" ] && return 1
+    NOW=$(date +%s)
+    [ $((NOW - _BT_TS)) -lt 60 ] && return 0
+    CUR=$("$ADB" -s "$ADB_TARGET" shell settings get global bluetooth_on 2>/dev/null | tr -d '\r')
+    [ "$CUR" = "1" ] && { _BT_TS=$NOW; return 0; }
+    "$ADB" -s "$ADB_TARGET" shell svc bluetooth enable > /dev/null 2>&1
+    sleep 2
+    NEW=$("$ADB" -s "$ADB_TARGET" shell settings get global bluetooth_on 2>/dev/null | tr -d '\r')
+    _BT_TS=$NOW
+    if [ "$NEW" = "1" ]; then
+        echo "$(date): bluetooth re-enabled (bluetooth_on ${CUR:-?}→1) — T33A 재연결 대기" >> "$LOG"
+        return 0
+    fi
+    echo "$(date): svc bluetooth enable 실패 (bluetooth_on=${NEW:-?})" >> "$LOG"
+    return 1
+}
+
 # ── 초기 시작 ──────────────────────────────────────────────────
 # relay가 이미 살아있으면 시작 루프 스킵 (watchdog 재시작 시 즉시 진입)
 _HB_Q=/data/local/tmp/t33a.relay_hb
@@ -242,6 +268,7 @@ else
 
     if [ -n "$ADB_TARGET" ]; then
         start_relay
+        ensure_bluetooth_on   # 재부팅 시 OS가 끈 BT 재활성화 → T33A 재연결 가능
     else
         echo "$(date): ADB unavailable — notifying user" >> "$LOG"
         notify_adb_needed
@@ -273,6 +300,7 @@ while true; do
         echo "$(date): relay dead (heartbeat ${AGE}s, PID $RPID) — restarting" >> "$LOG"
         ADB_TARGET=""
         if connect_adb && start_relay; then
+            ensure_bluetooth_on   # relay 재시작 시 ADB_TARGET 재활용해 BT도 확인(60s 스로틀)
             FAILS=0
         else
             notify_adb_needed
