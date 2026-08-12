@@ -22,6 +22,13 @@ WRAPPER=/sdcard/Download/T33A_wrapper
 ADB=/data/data/com.termux/files/usr/bin/adb
 NOTIFY_FLAG=/sdcard/Download/t33a_notify_ts
 AUTO_PULL="$HOME/t33a-remapper/scripts/t33a_auto_pull.sh"
+# 원격 알림(텔레그램) — 로컬 termux-notification은 회사서 봐도 조치 불가(adb 컴퓨터 없음)라
+# 35시간 방치의 원인이었음(2026-08-12 진단). 폰 Termux는 curl 보유 → 죽는 즉시 원격 푸시.
+# conf는 git 밖(토큰 비밀). boot.sh(Termux u0_a313)가 R/W 가능한 곳은 /sdcard —
+# /data/local/tmp는 shell:shell라 Termux 쓰기 불가(RELAY_PID 주석과 동일 이유).
+# 저가치 개인 알림봇이라 /sdcard 노출은 수용(단일 사용자 폰). 배치: adb shell로 직접 write.
+TG_CONF=/sdcard/Download/.t33a_telegram.conf     # BOT_TOKEN=..\nCHAT_ID=..
+REMOTE_STATE=/sdcard/Download/t33a_remote_state  # "dead <ts>" | "alive"
 
 # ── 자체 설치/업데이트 ─────────────────────────────────────────
 mkdir -p "$BOOT_DIR" "$SHORTCUT_DIR" 2>/dev/null
@@ -104,6 +111,40 @@ notify_adb_needed() {
     else
         timeout 3 termux-toast "T33A: 개발자 옵션 → 무선 디버깅 토글 필요" 2>/dev/null || true
     fi
+    # 로컬 알림은 회사서 무용 → 원격 텔레그램도 발사(자가 스로틀)
+    notify_remote_dead
+}
+
+# ── 원격 알림(텔레그램 direct from phone) ──────────────────────
+notify_remote() {  # $1=message
+    [ -f "$TG_CONF" ] || return 0
+    local BOT_TOKEN="" CHAT_ID=""
+    . "$TG_CONF" 2>/dev/null
+    [ -n "$BOT_TOKEN" ] && [ -n "$CHAT_ID" ] || return 0
+    command -v curl >/dev/null 2>&1 || return 0
+    curl -s -m 12 -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+        --data-urlencode "chat_id=${CHAT_ID}" \
+        --data-urlencode "text=$1" -o /dev/null 2>/dev/null || true
+}
+
+notify_remote_dead() {  # 자가복구 실패 시 — 최초 1회 + 3h마다 리마인드
+    local NOW STATE LAST
+    NOW=$(date +%s)
+    STATE=$(cat "$REMOTE_STATE" 2>/dev/null)
+    case "$STATE" in
+        dead\ *) LAST=${STATE#dead }; [ $((NOW - LAST)) -lt 10800 ] && return 0 ;;
+    esac
+    echo "dead $NOW" > "$REMOTE_STATE"
+    notify_remote "🔴 T33A 리매퍼 다운 — 자가복구 실패(adbd loopback 불가). 컴퓨터 근처에서 무선 디버깅 재토글 시 자동 복구. $(date '+%m/%d %H:%M')"
+}
+
+notify_remote_recovered() {  # 죽었다 살아난 경우에만 복구 알림
+    local STATE
+    STATE=$(cat "$REMOTE_STATE" 2>/dev/null)
+    case "$STATE" in
+        dead\ *) notify_remote "🟢 T33A 리매퍼 복구됨. $(date '+%m/%d %H:%M')" ;;
+    esac
+    echo "alive" > "$REMOTE_STATE"
 }
 
 # ── 무선 디버깅 자동 ON ────────────────────────────────────────
@@ -305,6 +346,7 @@ while true; do
         ADB_TARGET=""
         if connect_adb && start_relay; then
             ensure_bluetooth_on   # relay 재시작 시 ADB_TARGET 재활용해 BT도 확인(60s 스로틀)
+            notify_remote_recovered   # 죽었다 살아났으면 원격 "복구됨" 알림
             FAILS=0
         else
             notify_adb_needed
