@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-08-12T14:38:36.998Z",
+  "subagent_input": {
+    "session_id": "1af47922-fecd-485a-992b-0983887792d1",
+    "transcript_path": "/Users/noir/.claude/projects/-Users-noir/1af47922-fecd-485a-992b-0983887792d1.jsonl",
+    "cwd": "/Users/noir/Projects/t33a-remapper",
+    "permission_mode": "bypassPermissions",
+    "agent_id": "a683cf9f7231d8f50",
+    "agent_type": "",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "SubagentStop",
+    "stop_hook_active": false,
+    "agent_transcript_path": "/Users/noir/.claude/projects/-Users-noir/1af47922-fecd-485a-992b-0983887792d1/subagents/agent-a683cf9f7231d8f50.jsonl",
+    "last_assistant_message": "Reading t33a.conf contents",
+    "background_tasks": [
+      {
+        "id": "a70034ab08f199a8f",
+        "type": "subagent",
+        "status": "running",
+        "description": "Pre-landing review of t33a changes",
+        "agent_type": "review-pr"
+      }
+    ],
+    "session_crons": []
+  },
+  "changed_files": [],
+  "changed_count": 0,
+  "status": "clean",
+  "phase": "unknown",
+  "resume_prompt": "/pickup"
+}
