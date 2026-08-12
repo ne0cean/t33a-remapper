@@ -1,5 +1,17 @@
 # Current Status
 
+## ✅ 2026-08-12 — 근본원인 재확인 + "죽으면 원격 알림" UX (커밋 `5f4ddd8`, 리모컨 지참 세션)
+사용자가 "고쳤다는데 회사서 계속 안 됨" → 리모컨 지참. **라이브 진단으로 전모 확정**:
+- **리매퍼 SW는 무죄**: 21:49 실측 버튼 로그 O(116→tap, 172→더블클릭 리맵). 데몬 PPID=1 → ADB 끊어도 생존(11666 불변). 즉 "실행 중이면 ADB 없이 작동"은 맞음.
+- **진짜 원인 = 삼성이 relay(shell)를 주기적 kill → 재시작은 adbd-TCP loopback 필요 → 컴퓨터 없이는 부활 불가**. boot.log 실증: Aug10~11 **35시간 내내** `connect_adb 실패(Connection refused)` + `notifying user` 반복, 21:29 사용자가 이 세션 위해 무선디버깅 켠 순간에야 부활. → "회사=며칠 방치"의 정체.
+- **루트리스 상시 adbd-TCP는 물리적 불가 재확인(3중 실측)**: ①WADB Keeper가 **엉뚱한 레버**를 당김 — 코드가 `adb_wifi_enabled`(TLS)만 세팅하는데 boot.sh가 쓰는 건 classic `service.adb.tcp.port=5555`. 실측: `adb_wifi_enabled=0`인데도 5555 listen → **둘 무관**(WADB Keeper "쐈는데 실패"의 정체). ②`persist.adb.tcp.port` setprop = **SELinux 차단**(rc=1). ③TLS는 과거 "Samsung 미지속" 결론. → "컨틴전시=별도 루팅 기기"가 데이터로 증명됨.
+- **채택 방향 = 한계 수용 + 부활 UX 개선**. 로컬 termux-notification은 회사서 봐도 조치불가라 35시간 방치의 원인 → **폰 Termux curl로 텔레그램 직접 푸시**로 교체.
+  - `notify_remote{,_dead,_recovered}` boot.sh 추가: 자가복구 실패 즉시 1회 + 3h 리마인드, 부활 시 "복구됨". conf=`/sdcard/Download/.t33a_telegram.conf`(git밖, Trading봇 재사용). REMOTE_STATE도 /sdcard(Termux는 /data/local/tmp 쓰기 불가).
+  - `scripts/t33a-revive.sh`: Mac 원터치 복구(adb connect→relay 경유 재시작→검증). 무선디버깅 수동 토글 댄스 대체.
+  - **검증**: 폰 curl→telegram `http_200` 2회(직접+conf경로), 상태머신 로직(throttle/재발송/복구/침묵) 전 케이스 PASS. 트리거 배포로 새 워치독(PID 11414) 라이브 활성화.
+- **미검증(다음)**: 실사 죽음(삼성 kill 자연발생) → 워치독 notify_remote_dead 자동 발화 e2e. 코드경로·상태머신은 실증됐고 남은 건 자연 트리거 1회.
+- ⚠️ **문서 드리프트**: CLAUDE.md/이 파일의 "WADB Keeper로 재부팅 자동복구 달성"은 **엉뚱 레버라 실효 없음**이 이번에 확정. 방향 재결정 시 갱신 필요(이번엔 한계수용이라 WADB Keeper 미제거).
+
 ## ✅ 2026-08-07 — "리매퍼 미동작" 진단→BT 자동 ON 수리 (커밋 `f15fc3d`)
 사용자 "재부팅 후 아직도 작동 안 함" 신고. 레슨 #13(부재/과거 트리거는 라이브 프로브 전 로그부터)대로 폰(192.168.0.18:5555) 로그부터 진단.
 - **소프트웨어 스택 전부 정상**: 데몬 heartbeat 15s·relay 생존·매핑 5개 로드·TCP 5555·자가복구 체인 오늘 15:50~51 실제 작동(`daadaed` 수리 발효 실증). 지난 "데몬 사망" 인시던트 **재발 안 함**.
