@@ -28,8 +28,10 @@ HB=$(a shell 'echo $(( $(date +%s) - $(stat -c %Y /data/local/tmp/t33a.relay_hb 
 echo "   status=$ST  relay_hb_age=${HB}s"
 
 # 3. relay 경유 재시작 (CLAUDE.md 규칙: 반드시 relay 경유 → PPID=1 standalone 생존)
+#    start_relay와 동일: 죽어가는 relay pkill + stale hb 삭제 후 기동 —
+#    안 하면 오동작 중인 좀비 relay와 새 relay가 hb 갱신 경쟁해 "이미 살았다" 오인.
 echo "   relay 재기동..."
-a shell "setsid /system/bin/sh /sdcard/Download/t33a_relay.sh < /dev/null > /dev/null 2>&1 &" 2>/dev/null
+a shell "pkill -x t33a_remap 2>/dev/null; rm -f /data/local/tmp/t33a.relay_hb; setsid /system/bin/sh /sdcard/Download/t33a_relay.sh < /dev/null > /dev/null 2>&1 &" 2>/dev/null
 
 # 4. 검증 (최대 20s heartbeat 갱신 대기)
 for i in $(seq 1 20); do

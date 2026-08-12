@@ -116,15 +116,16 @@ notify_adb_needed() {
 }
 
 # ── 원격 알림(텔레그램 direct from phone) ──────────────────────
-notify_remote() {  # $1=message
-    [ -f "$TG_CONF" ] || return 0
+notify_remote() {  # $1=message; 전송 성공(0)/불가(비0) 반환 — state 기록 게이트용
+    [ -f "$TG_CONF" ] || return 1
     local BOT_TOKEN="" CHAT_ID=""
     . "$TG_CONF" 2>/dev/null
-    [ -n "$BOT_TOKEN" ] && [ -n "$CHAT_ID" ] || return 0
-    command -v curl >/dev/null 2>&1 || return 0
-    curl -s -m 12 -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+    [ -n "$BOT_TOKEN" ] && [ -n "$CHAT_ID" ] || return 1
+    command -v curl >/dev/null 2>&1 || return 1
+    # -f: HTTP 4xx/5xx(토큰만료 등)도 실패로 → 미전송을 '전송됨'으로 오기록 방지. || true 없음.
+    curl -sf -m 12 -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
         --data-urlencode "chat_id=${CHAT_ID}" \
-        --data-urlencode "text=$1" -o /dev/null 2>/dev/null || true
+        --data-urlencode "text=$1" -o /dev/null 2>/dev/null
 }
 
 notify_remote_dead() {  # 자가복구 실패 시 — 최초 1회 + 3h마다 리마인드
@@ -134,8 +135,10 @@ notify_remote_dead() {  # 자가복구 실패 시 — 최초 1회 + 3h마다 리
     case "$STATE" in
         dead\ *) LAST=${STATE#dead }; [ $((NOW - LAST)) -lt 10800 ] && return 0 ;;
     esac
-    echo "dead $NOW" > "$REMOTE_STATE"
-    notify_remote "🔴 T33A 리매퍼 다운 — 자가복구 실패(adbd loopback 불가). 컴퓨터 근처에서 무선 디버깅 재토글 시 자동 복구. $(date '+%m/%d %H:%M')"
+    # 전송 성공 후에만 state 기록 — 기록→curl 사이 kill(이 기능이 방어하는 바로 그 실패)로
+    # 알림 유실 후 3h 침묵하는 결함 방어(review HIGH-B). 실패 시 미기록 → 다음 틱 재시도.
+    notify_remote "🔴 T33A 리매퍼 다운 — 자가복구 실패(adbd loopback 불가). 컴퓨터 근처에서 무선 디버깅 재토글 시 자동 복구. $(date '+%m/%d %H:%M')" \
+        && echo "dead $NOW" > "$REMOTE_STATE"
 }
 
 notify_remote_recovered() {  # 죽었다 살아난 경우에만 복구 알림
