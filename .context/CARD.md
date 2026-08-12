@@ -1,5 +1,5 @@
 PROJECT: t33a-remapper
-TASK: "리매퍼 미동작" 진단 → 실원인=재부팅 후 폰 BT off(리매퍼 무죄). boot.sh ensure_bluetooth_on() 3지점 배선 + /review HIGH(startup-skip) 폐쇄. e2e watchdog경로 PASS
-STATUS: 코드·push 완료(f15fc3d·85782f6). 생재부팅 콜드패스+물리 키 인터셉트만 미검증(리모컨 부재)
-NEXT: 리모컨+폰 물리접근 시 adb reboot→잠금해제→boot.log 'bluetooth re-enabled' 확인→리모컨 버튼→앱 반응 (10분 완결)
-BRANCH: main | LAST: 2fb94a2 [docs]: /review HIGH 반영 기록
+TASK: 리모컨 지참 라이브 진단 — 리매퍼 SW 무죄(버튼 로그 실증), 실원인=삼성이 relay kill→adbd loopback 없인 부활불가(컴퓨터 없는 회사=며칠 방치). 루트리스 상시 adbd-TCP 물리적 불가 재확인(WADB Keeper=엉뚱레버). → 한계수용+폰→텔레그램 원격 다운/복구 알림 + t33a-revive.sh. review HIGH(전송전 state기록→kill시 3h침묵) 수리.
+STATUS: 코드·push·폰 live 배포 완료(be2cc56). curl→telegram 200·상태머신 e2e PASS
+NEXT: 실사 죽음(삼성 kill 자연발생) 시 notify_remote_dead 자동발화 e2e 1건 확인
+BRANCH: main | LAST: be2cc56 [fix]: 원격알림 review HIGH — 전송 성공 후에만 state 기록

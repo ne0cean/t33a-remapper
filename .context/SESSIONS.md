@@ -495,3 +495,19 @@
 **이슈**: 무선 디버깅 포트가 매번 랜덤 로테이트 → adb mdns services로 재발견 필요. pm 기본 유저가 150(SecureFolder)이라 --user 0 명시 필요.
 **빌드**: ✅ (bash -n 전 스크립트, apktool 빌드/설치/e2e 검증)
 **미검증**: 실제 재부팅 풀체인 (Next Tasks -1번, 사용자가 나중에)
+
+## [2026-08-12] 근본원인 재확인 + 폰→텔레그램 원격 다운알림 (리모컨 지참)
+
+**완료**:
+- 라이브 진단으로 전모 확정: 리매퍼 SW 무죄(21:49 버튼 로그 실증, 데몬 PPID=1 ADB끊어도 생존). 실원인=삼성이 relay(shell) 주기적 kill → 재시작은 adbd-TCP loopback 필요 → 컴퓨터 없으면 부활불가(boot.log 35h `Connection refused` 실증 = "회사=며칠 방치").
+- 루트리스 상시 adbd-TCP 물리적 불가 3중 실측: WADB Keeper가 엉뚱한 레버(`adb_wifi_enabled` TLS, boot.sh는 classic 5555) · persist setprop=SELinux 차단 · TLS=Samsung 미지속.
+- 한계수용+부활 UX: boot.sh `notify_remote{,_dead,_recovered}` — 폰 Termux curl로 텔레그램 직접 다운/복구 알림(로컬 알림은 회사서 무용). throttle 1회+3h, conf=/sdcard(git밖, Trading봇 재사용). `scripts/t33a-revive.sh`=Mac 원터치 복구.
+- review-pr HIGH 수리: 전송 성공 후에만 dead state 기록(기록→curl 사이 kill 시 3h 침묵 결함). notify_remote가 curl rc 반환. revive.sh pkill+rm, .gitignore.
+- 검증: 폰 curl→telegram http_200(직접+conf경로), 상태머신 전 케이스 mock e2e PASS, 트리거 배포로 워치독 라이브(be2cc56).
+
+**이슈**: WADB Keeper "재부팅 자동복구 달성" 문서주장이 엉뚱레버라 실효無 확정 → 문서 드리프트 플래그(방향 재결정 시 갱신).
+
+**미검증**: 실사 죽음(삼성 kill 자연발생) → notify_remote_dead 자동발화 e2e 1건.
+
+**빌드**: ✅ (bash -n boot.sh·revive.sh PASS, 테스트 스위트 없음=셸 프로젝트)
+**커밋**: 5f4ddd8(feat) 4974e90(docs) be2cc56(fix HIGH)
