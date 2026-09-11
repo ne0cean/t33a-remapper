@@ -1,89 +1,128 @@
 #!/bin/bash
-# T33A 자동 복구 데몬 v3 (Mac launchd: com.ateam.t33a-tcpip)
+# T33A 자동 복구 데몬 v4 (Mac launchd: com.ateam.t33a-tcpip)
 #
 # 역사:
-#  v1 수동형 — `adb devices`에 폰이 저절로 뜨기를 기다림. 그 자동 등장은 adb mDNS
-#     자동연결 이벤트 의존이라 놓치면 안 온다. 2026-09-11 10:58~11:49 폰이 같은 LAN에
-#     있었는데도 미연결, 17:49 Wi-Fi 재접속 announce를 잡고서야 복구(15h 방치).
-#  v2 능동형 — 15s마다 직접 붙으러 감. 단 파괴적 조치(pkill)를 백오프·재확인 없이
-#     도입해 리뷰에서 CRITICAL 1·HIGH 2 지적.
-#  v3 (이 파일) — v2의 능동성 유지 + 리뷰 지적 전량 반영:
-#     ① FAILS 백오프(15s→60s→300s) — t33a_boot.sh 가 2026-07-23 에 이미 배운 교훈
-#     ② 파괴적 조치 전 2차 확인 — adb 단발 실패로 멀쩡한 remap 을 죽이지 않음
-#     ③ 폰 relay 가 살아있으면 relay 를 새로 스폰하지 않고 remap kill 만(레이스 감소)
-#     ④ IP 매칭 콜론 앵커(.18 이 .180 을 잡던 프리픽스 충돌 제거)
-#     ⑤ 상태 프로브 1회 왕복으로 통합, 비숫자 방어, 로그 로테이션
+#  v1 수동형 — `adb devices`에 폰이 저절로 뜨기를 기다림(mDNS 자동연결 이벤트 의존).
+#     2026-09-11 10:58~11:49 같은 LAN 에 있었는데도 미연결, 17:49 Wi-Fi 재접속
+#     announce 를 잡고서야 복구 = 15시간 방치.
+#  v2 능동형 — 15s 마다 직접 붙으러 감. 단 파괴적 조치(pkill)를 백오프·재확인 없이 도입.
+#  v3 — 1차 리뷰(review-pr) CRITICAL 1·HIGH 2·MEDIUM 2 반영: 백오프, 2차 확인, relay 위임.
+#  v4 (이 파일) — 2차 렌즈 적대 리뷰 반영:
+#     ① relay 생존 판정을 /proc/<pid>/cmdline 으로 검증 (PID 재사용·stale pidfile 오탐 →
+#        "relay 살아있음" 오판 → remap kill 만 반복하며 영구 무복구 되는 경로 차단)
+#     ② 헬스 판정 3중화: relay_hb + remap 프로세스 2개(supervisor+worker) + worker
+#        heartbeat 신선도. supervisor 는 설계상 영구 생존이라 개수>0 만 보면 worker
+#        크래시루프를 영원히 "정상"으로 본다. status=restarting 고착도 이상으로 본다.
+#     ③ FAILS 를 디스크에 영속화 — launchd KeepAlive 재기동마다 백오프가 0 으로
+#        리셋되어 감속이 무력화되는 경로 차단.
+#     ④ 단일 인스턴스 락 — 수동 실행 + launchd 동시 구동 시 서로의 백오프를 우회.
+#     ⑤ 플래핑 대응: FAILS 를 0 으로 리셋하지 않고 감쇠. 알림 스로틀도 FAILS 기준.
+#     ⑥ 로그 로테이션을 inode 보존(in-place truncate)으로 — launchd 가 잡은 fd 고아화 방지.
+#     ⑦ 폰에서 온 status 문자열을 osascript 에 넣기 전 sanitize.
+#     ⑧ IP 정규식의 리터럴 dot 이스케이프 + IP 가 바뀌어도 시리얼로 찾아가는 폴백.
 
 LOG=/tmp/t33a-tcpip.log
+STATEDIR=/tmp
+FAILS_FILE="$STATEDIR/t33a-tcpip.fails"
+LOCK_PIDF="$STATEDIR/t33a-tcpip.pid"
 ADB=/opt/homebrew/bin/adb
 PHONE_IP="${T33A_IP:-192.168.0.18}"
+PHONE_SERIAL="${T33A_SERIAL:-R3CXA0DKVVV}"
 HB_REMOTE=/data/local/tmp/t33a.relay_hb
-RELAY_PIDF=/data/local/tmp/t33a_relay.pid
 RELAY_SH=/sdcard/Download/t33a_relay.sh
-STALE=90             # relay_hb 이 나이를 넘으면 죽은 것으로 간주(초)
+STALE=90             # relay_hb 이 나이를 넘으면 relay 사망(초)
+WORKER_STALE=150     # worker heartbeat 주기 60s → 2.5배 여유(초)
 CONFIRM_WAIT=15      # 파괴적 조치 전 2차 확인 간격(초)
 AWAY_BACKOFF=60      # 폰이 LAN 에 없을 때 대기(초)
-LOG_MAX=2000000      # 로그 상한(바이트) — 넘으면 최근 500줄만 남김
+LOG_MAX=2000000      # 로그 상한(바이트)
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOG"; }
 
+# launchd 의 StandardOutPath 와 같은 파일이므로 inode 를 바꾸면 안 된다(fd 고아화).
 rotate_log() {
     [ -f "$LOG" ] || return 0
     local sz; sz=$(stat -f %z "$LOG" 2>/dev/null || echo 0)
     [ "$sz" -gt "$LOG_MAX" ] || return 0
-    tail -500 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+    tail -500 "$LOG" > "$LOG.tmp" 2>/dev/null && cat "$LOG.tmp" > "$LOG" && rm -f "$LOG.tmp"
     log "(로그 로테이션 — 이전 내용 잘림)"
 }
 
-notify() {  # $1=title $2=message $3=sound
-    osascript -e "display notification \"$2\" with title \"$1\" sound name \"${3:-Glass}\"" 2>/dev/null || true
+notify() {  # $1=title $2=message
+    local msg; msg=$(printf '%s' "$2" | tr -cd 'A-Za-z0-9 ().,:=?가-힣✅⚠️-')
+    osascript -e "display notification \"$msg\" with title \"$1\" sound name \"${3:-Glass}\"" 2>/dev/null || true
 }
+
+# ── 단일 인스턴스 락 (수동 실행 + launchd 동시 구동 차단) ──
+if [ -f "$LOCK_PIDF" ]; then
+    OLD=$(cat "$LOCK_PIDF" 2>/dev/null)
+    case "$OLD" in ''|*[!0-9]*) OLD=0 ;; esac
+    if [ "$OLD" -gt 0 ] && ps -p "$OLD" -o command= 2>/dev/null | grep -q t33a-auto-tcpip; then
+        log "이미 인스턴스 PID $OLD 가동 중 — 중복 실행 중단 (PID $$)"
+        exit 0
+    fi
+fi
+echo $$ > "$LOCK_PIDF"
+trap 'rm -f "$LOCK_PIDF"' EXIT INT TERM
+
+# ── FAILS 영속화 (launchd 재기동으로 백오프가 리셋되는 것 차단) ──
+FAILS=$(cat "$FAILS_FILE" 2>/dev/null)
+case "$FAILS" in ''|*[!0-9]*) FAILS=0 ;; esac
+set_fails() { FAILS="$1"; echo "$FAILS" > "$FAILS_FILE"; }
 
 # 연결된 폰 주소를 표준출력으로. 없으면 빈 문자열. 필요하면 직접 붙으러 간다.
 ensure_device() {
-    local d tls
-    # 0. 이미 device 상태로 붙어 있나 (IP 는 콜론 경계까지 앵커 — .18 vs .180 충돌 방지)
-    d=$("$ADB" devices 2>/dev/null | awk -v ip="$PHONE_IP" '$2=="device" && $1 ~ "^"ip":" {print $1}' | head -1)
+    local d tls cand ipre
+    ipre=$(printf '%s' "$PHONE_IP" | sed 's/\./\\./g')   # 리터럴 dot 이스케이프
+
+    d=$("$ADB" devices 2>/dev/null | awk -v ip="$ipre" '$2=="device" && $1 ~ "^"ip":" {print $1}' | head -1)
     [ -n "$d" ] && { echo "$d"; return 0; }
 
-    # 1. classic 5555 직접 시도
     if "$ADB" connect "$PHONE_IP:5555" 2>&1 | grep -qiE "^connected|already connected"; then
         echo "$PHONE_IP:5555"; return 0
     fi
 
-    # 2. 무선디버깅 TLS 포트를 능동 조회 (수동 대기 금지 — v1 의 결함)
-    tls=$("$ADB" mdns services 2>/dev/null | awk -v ip="$PHONE_IP" '/_adb-tls-connect/ && $3 ~ "^"ip":" {print $3}' | head -1)
+    # 무선디버깅 TLS 포트 능동 조회 — 먼저 알려진 IP, 실패 시 시리얼로 신원 확인(DHCP 대비)
+    tls=$("$ADB" mdns services 2>/dev/null | awk -v ip="$ipre" '/_adb-tls-connect/ && $3 ~ "^"ip":" {print $3}' | head -1)
     if [ -n "$tls" ] && "$ADB" connect "$tls" 2>&1 | grep -qiE "^connected|already connected"; then
         echo "$tls"; return 0
     fi
+    for cand in $("$ADB" mdns services 2>/dev/null | awk '/_adb-tls-connect/ {print $3}'); do
+        "$ADB" connect "$cand" 2>&1 | grep -qiE "^connected|already connected" || continue
+        if [ "$("$ADB" -s "$cand" shell getprop ro.serialno 2>/dev/null | tr -d '\r\n ')" = "$PHONE_SERIAL" ]; then
+            log "IP 변경 감지 — 시리얼로 재발견: $cand (기존 $PHONE_IP)"
+            PHONE_IP="${cand%%:*}"
+            echo "$cand"; return 0
+        fi
+        "$ADB" disconnect "$cand" >/dev/null 2>&1
+    done
     echo ""
 }
 
-# 폰 상태를 1회 왕복으로 수집 → "AGE=<n> REMAP=<개수> RELAY=<0|1> PORT=<n> OK=1"
-# OK 가 없으면 통신 실패다(= 죽었다고 단정 금지 — v2 의 HIGH 지적).
+# 폰 상태 1회 왕복 수집 → "AGE=<n> WHB=<n> REMAP=<개수> RELAY=<0|1> PORT=<n> ST=<status> OK=1"
+# RELAY 는 pid 존재만이 아니라 cmdline 까지 대조한다(PID 재사용 오탐 차단).
 probe() {
-    "$ADB" -s "$1" shell 'HB=$(stat -c %Y /data/local/tmp/t33a.relay_hb 2>/dev/null || echo 0); NOW=$(date +%s); RP=$(cat /data/local/tmp/t33a_relay.pid 2>/dev/null); [ -z "$RP" ] && RP=0; case "$RP" in *[!0-9]*) RP=0 ;; esac; RELAY=0; [ "$RP" -gt 0 ] && [ -d /proc/$RP ] && RELAY=1; echo "AGE=$((NOW-HB)) REMAP=$(pidof t33a_remap | wc -w) RELAY=$RELAY PORT=$(getprop service.adb.tcp.port) OK=1"' 2>/dev/null | tr -d '\r'
+    "$ADB" -s "$1" shell 'NOW=$(date +%s); HB=$(stat -c %Y /data/local/tmp/t33a.relay_hb 2>/dev/null || echo 0); WH=$(stat -c %Y /data/local/tmp/t33a.heartbeat 2>/dev/null || echo 0); RP=$(cat /data/local/tmp/t33a_relay.pid 2>/dev/null); [ -z "$RP" ] && RP=0; case "$RP" in *[!0-9]*) RP=0 ;; esac; RELAY=0; if [ "$RP" -gt 0 ] && [ -d /proc/$RP ]; then tr "\0" " " < /proc/$RP/cmdline 2>/dev/null | grep -q t33a_relay && RELAY=1; fi; echo "AGE=$((NOW-HB)) WHB=$((NOW-WH)) REMAP=$(pidof t33a_remap | wc -w) RELAY=$RELAY PORT=$(getprop service.adb.tcp.port) ST=$(cat /data/local/tmp/t33a.status 2>/dev/null | tr -cd "A-Za-z:_") OK=1"' 2>/dev/null | tr -d '\r'
 }
 
 field() { echo "$1" | tr ' ' '\n' | sed -n "s/^$2=//p" | head -1; }
 
-# 건강한가? 0=건강, 1=죽음, 2=판정불가(통신 실패)
+# 0=건강, 1=죽음/이상, 2=판정불가(통신 실패)
 assess() {
-    local p="$1" age remap
+    local p="$1" age whb remap st
     echo "$p" | grep -q "OK=1" || return 2
-    age=$(field "$p" AGE); remap=$(field "$p" REMAP)
-    case "$age" in ''|*[!0-9]*) return 2 ;; esac
-    case "$remap" in ''|*[!0-9]*) return 2 ;; esac
-    [ "$age" -lt "$STALE" ] && [ "$remap" -gt 0 ] && return 0
-    return 1
+    age=$(field "$p" AGE); whb=$(field "$p" WHB); remap=$(field "$p" REMAP); st=$(field "$p" ST)
+    case "$age$whb$remap" in ''|*[!0-9]*) return 2 ;; esac
+    [ "$age" -lt "$STALE" ] || return 1              # relay 살아있나
+    [ "$remap" -ge 2 ] || return 1                   # supervisor+worker 둘 다
+    [ "$whb" -lt "$WORKER_STALE" ] || return 1       # worker 가 실제로 돌고 있나
+    [ "$st" = "restarting" ] && return 1             # 재시작 고착 = 크래시루프 의심
+    return 0
 }
 
-log "=== t33a-auto-tcpip v3 (능동형+백오프) started (PID $$) ==="
+log "=== t33a-auto-tcpip v4 started (PID $$, 이월 FAILS=$FAILS) ==="
 STATE=unknown   # alive | dead | away
-FAILS=0
 
 while true; do
-    # 백오프: 연속 실패가 쌓이면 감속 (t33a_boot.sh 와 동일한 교훈)
     if   [ "$FAILS" -ge 20 ]; then sleep 300
     elif [ "$FAILS" -ge 5  ]; then sleep 60
     else sleep 15
@@ -100,8 +139,9 @@ while true; do
 
     P=$(probe "$DEV"); assess "$P"; VERDICT=$?
     if [ "$VERDICT" = "0" ]; then
-        [ "$STATE" != "alive" ] && log "[$DEV] 정상 (relay_hb $(field "$P" AGE)s)"
-        STATE=alive; FAILS=0
+        [ "$STATE" != "alive" ] && log "[$DEV] 정상 ($P)"
+        STATE=alive
+        [ "$FAILS" -gt 0 ] && set_fails $((FAILS-1))   # 리셋이 아니라 감쇠(플래핑 대비)
         continue
     fi
 
@@ -109,19 +149,19 @@ while true; do
     sleep "$CONFIRM_WAIT"
     P=$(probe "$DEV"); assess "$P"; VERDICT2=$?
     if [ "$VERDICT2" = "0" ]; then
-        log "[$DEV] 1차 이상 → 2차 정상, 일시적 통신 실패로 판단하고 무시"
-        STATE=alive; FAILS=0
+        log "[$DEV] 1차 이상 → 2차 정상, 일시적 오류로 판단 (FAILS 유지 $FAILS)"
+        STATE=alive
         continue
     fi
     if [ "$VERDICT2" = "2" ]; then
-        FAILS=$((FAILS+1))
+        set_fails $((FAILS+1))
         log "[$DEV] 폰 응답 없음(판정불가) — 파괴적 조치 보류 (연속 $FAILS)"
         continue
     fi
 
-    # ── 여기부터 복구 (진짜 죽음으로 2회 연속 확인됨) ──
-    FAILS=$((FAILS+1))
-    log "[$DEV] relay 사망 확정 (relay_hb $(field "$P" AGE)s, remap 프로세스 $(field "$P" REMAP)개, 연속 $FAILS) — 복구 시작"
+    # ── 복구 (2회 연속 이상 확인됨) ──
+    set_fails $((FAILS+1))
+    log "[$DEV] 이상 확정 ($P, 연속 $FAILS) — 복구 시작"
 
     PORT=$(field "$P" PORT)
     if [ "$PORT" != "5555" ]; then
@@ -134,11 +174,10 @@ while true; do
     fi
 
     if [ "$(field "$P" RELAY)" = "1" ]; then
-        # 폰 relay 가 살아있다 → 자체 워치독(5s)이 remap 을 되살린다. relay 중복 스폰 금지.
-        log "[$DEV] 폰 relay 생존 — remap 만 kill 하고 온디바이스 워치독에 위임"
+        log "[$DEV] 폰 relay 생존(cmdline 확인) — remap 만 kill 하고 온디바이스 워치독에 위임"
         "$ADB" -s "$DEV" shell "pkill -x t33a_remap" >/dev/null 2>&1
     else
-        log "[$DEV] 폰 relay 도 사망 — relay 직접 재기동"
+        log "[$DEV] 폰 relay 사망 — relay 직접 재기동"
         "$ADB" -s "$DEV" shell "pkill -x t33a_remap 2>/dev/null; rm -f $HB_REMOTE; setsid /system/bin/sh $RELAY_SH < /dev/null > /dev/null 2>&1 &" >/dev/null 2>&1
     fi
 
@@ -150,15 +189,15 @@ while true; do
     done
 
     if [ "$RECOVERED" = "1" ]; then
-        STATUS=$("$ADB" -s "$DEV" shell "cat /data/local/tmp/t33a.status 2>/dev/null" | tr -d '\r\n ')
-        log "[$DEV] ✅ 복구 확인 (relay_hb $(field "$P" AGE)s, status=$STATUS)"
-        [ "$STATE" != "alive" ] && notify "✅ T33A 복구됨" "리매핑 동작 중 (status=${STATUS:-?})" "Glass"
-        STATE=alive; FAILS=0
+        STATUS=$(field "$P" ST)
+        log "[$DEV] ✅ 복구 확인 ($P)"
+        [ "$STATE" != "alive" ] && notify "T33A 복구됨" "리매핑 동작 중 (status=${STATUS:-?})" "Glass"
+        STATE=alive
+        set_fails $((FAILS/2))     # 리셋이 아니라 절반 — 반복 복구는 이상 신호다
     else
         log "[$DEV] ⚠️ 복구 실패 (연속 $FAILS) — 폰 T33A 위젯 1회 탭 필요"
-        # 첫 실패 + 이후 5회마다 재알림 (v2 는 최초 1회뿐이라 무음 방치됐다)
-        if [ "$STATE" != "dead" ] || [ $((FAILS % 5)) = 0 ]; then
-            notify "⚠️ T33A 복구 실패" "relay 미복구(연속 $FAILS). 폰 T33A 위젯 1회 탭 필요." "Basso"
+        if [ "$FAILS" = "1" ] || [ $((FAILS % 5)) = 0 ]; then
+            notify "T33A 복구 실패" "relay 미복구(연속 $FAILS). 폰 위젯 1회 탭 필요." "Basso"
         fi
         STATE=dead
     fi
