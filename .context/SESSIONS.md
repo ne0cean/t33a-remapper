@@ -78,6 +78,24 @@
 
 ---
 
+## [2026-09-11] 맥 복구 데몬 능동형 전환 v1→v4 + 2단 리뷰 (커밋 78ff7b3·a757114·8467295)
+
+**완료**:
+- 폰 복구 1회(`t33a-revive.sh`) — relay PID 6306·데몬 2프로세스·BT ON·매핑 5개. 리모컨만 미연결(status=waiting).
+- 15시간 방치 근본원인 규명: 맥 데몬이 수동 대기형 → adb mDNS 자동연결 이벤트를 놓치면 영구 무동작. 같은 LAN에 51분 있었는데도 복구 0건이 증거.
+- v2 능동형 재작성(15s 능동 접속 + mdns 능동 조회 + tcpip + relay 재기동) → 장애주입 9초 복구 실증.
+- 1차 review-pr(CRITICAL 티어) 지적 5건 → v3. 2차 adversarial이 v3를 반증(신규 CRITICAL 1·HIGH 3) → v4.
+- v4 핵심: relay 생존을 cmdline까지 대조(PID 재사용 오탐 차단), 헬스 4중 판정(supervisor/worker 모델 반영), FAILS 디스크 영속(launchd 재기동 백오프 무력화 차단), 단일 인스턴스 락, 플래핑 감쇠, 로그 로테이션 inode 보존, osascript sanitize, 시리얼 폴백.
+- 배포 드리프트 차단: `~/bin/t33a-auto-tcpip.sh` → 레포 파일 심링크.
+
+**이슈**:
+- review-pr CRITICAL 티어의 외부 ultra 리뷰 미실행 — main 직행이라 PR 없음 + 레포에 ultra 워크플로 부재. 2차 렌즈(적대)로 대체 수행.
+- 폰이 외부망이거나 맥이 꺼져 있으면 복구 불가(구조적 한계, 미해결).
+
+**빌드**: ✅ (C 빌드는 폰 온디바이스 clang — 이번 변경 없음. 셸 `bash -n` PASS, 라이브 데몬 정상 + 폰 정상 실측)
+
+---
+
 ## [2026-06-06] standalone 구조 복구 + 워치독 강화 + launchd 수정
 
 **완료**:

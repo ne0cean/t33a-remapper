@@ -1,5 +1,5 @@
 PROJECT: t33a-remapper
-TASK: 재부팅 후 데몬 부활 2회(`t33 remapper` mdns 재연결, 잠금해제 대기 후 자동 재시도로 성공). 진단 소득: PID 16628 연속 생존 실측 → "mdns 미탐지 ≠ 데몬 사망"(무선 디버깅만 일시 사망). 전역 세션앵커 수리(`t33` 별칭 = 이 레포 등재).
-STATUS: 데몬 Running(PID 16628). 폰측·코드 무변경(문서만)
-NEXT: 실사 죽음(삼성 kill 자연발생) 시 notify_remote_dead 자동발화 e2e 1건 확인 (8/12 이관분 유지)
-BRANCH: main | LAST: 28e9438 [docs]: /end — 원격알림
+TASK: 맥 복구 데몬 v1(수동대기)→v4(능동+백오프) 전환. 15시간 방치 근본원인=맥이 폰을 기다리기만 함. 1차 review-pr + 2차 adversarial 지적 전량 반영, 장애주입 2회로 검증.
+STATUS: 데몬 v4 가동(launchd, 단일 인스턴스 락). 폰 정상(remap 2프로세스·port 5555), 리모컨만 미연결(status=waiting)
+NEXT: 리모컨 지참 시 실키 인터셉트 e2e 1회(5매핑 적용 확인)
+BRANCH: main | LAST: 8467295 [fix]: 복구 데몬 v4

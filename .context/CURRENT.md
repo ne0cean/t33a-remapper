@@ -1,5 +1,22 @@
 # Current Status
 
+## ✅ 2026-09-11 — 맥 복구 데몬 능동형 전환(v1→v4) + 2단 리뷰 (커밋 `78ff7b3`·`a757114`·`8467295`)
+"폰 재부팅됐어 복구해"로 시작 → `t33a-revive.sh` 1회로 즉시 복구(status=waiting, 리모컨 미연결만 남음). 여기서 **진짜 문제가 드러남**.
+- **15시간 방치의 정체 = 맥 데몬이 수동형이었다**. 09-11 02:57 재부팅(삼성 자동 재시작), Termux:Boot의 boot.sh는 10:58에야 기동, 17:51까지 relay 부활 실패. 사용자 반문("대부분 재부팅은 같은 네트워크에서 이뤄졌는데 이상한데?")이 정확했다 — **10:58~11:49 폰이 집 Wi-Fi에 있었는데도 복구 0건**. `~/bin/t33a-auto-tcpip.sh`(launchd `com.ateam.t33a-tcpip`)가 `adb devices`에 폰이 *저절로 뜨기*만 기다렸고, 그 자동 등장은 adb mDNS 자동연결 이벤트 의존이라 놓치면 영영 안 온다. 17:49 Wi-Fi 재접속 announce를 우연히 잡아 부활한 것 = 운.
+- **수리 v2 능동형**: 15s마다 맥이 직접 `adb connect :5555` → 실패 시 `adb mdns services`로 TLS 포트 능동 조회해 connect → `adb tcpip 5555` → relay 재기동. 실측: `adb mdns services` 1회차 빈 결과, 2회차부터 폰 노출(포트 41413) — 능동 조회는 되는데 수동 대기만 안 됐던 것.
+- **장애주입 검증 ①**: `adb usb`로 adbd TCP off + relay kill(재부팅 직후 모사) → mDNS TLS 경유 **9초** 자동복구(20:28:19→20:28:28).
+- **1차 리뷰(review-pr, CRITICAL 티어 판정) 지적 5건 → v3**: 백오프 없음(폰 워치독이 07-23에 이미 배운 교훈 역행)·adb 단발 실패가 즉시 pkill·relay 중복 스폰·IP 프리픽스 매칭(.18이 .180 매치)·pidof 다중 PID 로그 뭉갬.
+- **2차 렌즈(adversarial)가 v3를 반증 → v4**: 5건 중 온전히 막힌 건 콜론 앵커 1건뿐. 신규 CRITICAL 1 + HIGH 3 발견.
+  - relay 생존 판정이 `/proc/<pid>` 존재만 봄 → **PID 재사용·stale pidfile**(relay.sh에 EXIT trap 없음)에 속아 "relay 살아있음" 오판 → remap kill만 반복하며 **영구 무복구**. → cmdline 대조로 차단(실측: pidfile을 PID 1로 오염 → RELAY=0 확인).
+  - `pidof | wc -w > 0` 헬스체크가 supervisor/worker 모델과 불일치 — supervisor는 설계상 영구 생존이라 **worker 크래시루프를 영원히 "정상"으로 보고**. → relay_hb + REMAP>=2 + worker heartbeat(60s 주기/임계 150s) + status=restarting 고착, 4중 판정.
+  - FAILS 비영속 → launchd KeepAlive 재기동마다 백오프 0 리셋(CRITICAL 재발 경로). → `/tmp/t33a-tcpip.fails` 영속화(실측: 재기동 후 "이월 FAILS=7").
+  - 맥측 단일 인스턴스 락 부재 → 수동 실행+launchd 동시 구동이 백오프 우회(검증 중 실제로 내가 그 조건을 만듦). → pidfile+cmdline 락(실측: 2번째 실행 즉시 중단).
+  - 그 외: 플래핑 시 FAILS 리셋→감쇠, rotate_log의 mv가 launchd StandardOutPath inode 교체(fd 고아화)→in-place truncate, 폰 status 문자열 osascript 무이스케이프→sanitize, DHCP로 IP 바뀌면 mDNS 경로까지 침묵→`ro.serialno` 폴백.
+- **장애주입 검증 ②**: `chmod 000 t33a_remap`(영구 복구불가) → 사망확정 간격 35s·35s·65s 감속 실증 + relay 생존 감지해 remap만 kill(중복 스폰 0) + 알림 1회만. `chmod 755` 복원 → 자동 정상화. assess 판정 7케이스 표 테스트 전부 기대값 일치.
+- **배포 구조 수리**: 실행본이 레포 밖(`~/bin`) 수동 사본이라 조용히 갈라질 수 있었음 → 레포 파일 심링크로 교체(SSOT=`scripts/t33a-auto-tcpip.sh`).
+- ⚠️ **미해소**: review-pr가 CRITICAL 티어 → 외부 ultra 리뷰 요구. 이 레포는 main 직행 + `.github/workflows/ultra-review.yml` 부재로 자동 디스패치 경로가 막힘. 다음 CRITICAL 변경은 **브랜치에서 랜딩**해야 열린다.
+- **한계(구조적, 미해결)**: 맥이 꺼져 있거나 폰이 외부망(회사)이면 여전히 복구 불가 — 별도 루팅 기기 컨틴전시 없이는 안 풀림.
+
 ## ✅ 2026-08-12 — 근본원인 재확인 + "죽으면 원격 알림" UX (커밋 `5f4ddd8`, 리모컨 지참 세션)
 사용자가 "고쳤다는데 회사서 계속 안 됨" → 리모컨 지참. **라이브 진단으로 전모 확정**:
 - **리매퍼 SW는 무죄**: 21:49 실측 버튼 로그 O(116→tap, 172→더블클릭 리맵). 데몬 PPID=1 → ADB 끊어도 생존(11666 불변). 즉 "실행 중이면 ADB 없이 작동"은 맞음.
@@ -70,6 +87,8 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **standalone + 재부팅 
 - 원인: relay 25초 주기 사망 시 daemon도 같이 죽었던 구조 → 픽스로 해소
 
 ## ⏩ Next Tasks
+-3. **리모컨 실키 인터셉트 e2e** (리모컨 지참 시): 현재 status=waiting(BLE 미연결). 버튼 누르면 5매핑 즉시 적용되는지 1회 확인 — /dev/input 직전까지는 증명됨.
+-2.5. **CRITICAL 변경은 브랜치 랜딩**: main 직행하면 ultra 리뷰 디스패치가 구조적으로 막힘(PR 없음 + 워크플로 부재). 필요 시 `.github/workflows/ultra-review.yml` 도입 검토.
 -2. **🚀 배포+검증 대기 — 2026-08-01 수리 커밋 `daadaed`** (리모컨/폰 있을 때): ①새 `scripts/t33a_boot.sh`를 폰에 배포(규칙 #3: 검증하며) ②`adb reboot` → 잠금해제 → boot.log에서 `WADB Keeper 앱 broadcast` + loopback 연결 확인(Termux uid서 am broadcast 통하는지가 핵심 미검증) ③**adb "이 컴퓨터에서 항상 허용" 1회 체크**(근본원인 #2, 재부팅 인증 리셋 방어). broadcast 메커니즘 자체는 shell uid서 검증됨(result=0, logcat OK).
 -1. ~~WADB Keeper 실제 재부팅 테스트~~ → **🔴 실패 확정** (위 REALITY 참조). 위 -2로 대체.
 0. **🔬 검증 대기 — 재부팅 콜드패스 풀체인** (2026-06-27): `t33a-auto-tcpip.sh` 신버전(복구폴링 포함)이 *실제 재부팅*에서 안 돌아봄. 다음 재부팅 시 `/tmp/t33a-tcpip.log` 확인 → 성공=`✅ 복구 확인(status=active)` + macOS 알림. **주의: 재부팅 8분 내 PC 꽂으면** Termux:Boot 지연으로 `⚠️ 위젯 1회 탭` 뜸(버그 아님, graceful degrade). 8분 후 꽂으면 풀체인 정상. tcpip 자동활성/이미-tcp 복구알림 경로는 검증됨(19:25·19:57 로그).
