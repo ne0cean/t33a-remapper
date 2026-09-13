@@ -42,13 +42,29 @@ function sh(cmd, cmdArgs) {
 
 // --- 1. diff 추출 ------------------------------------------------------------
 
+// 리뷰 대상 = **머지될 결과(net diff)**. `gh pr diff --patch`는 커밋별 패치 시리즈라 중간에 만들었다
+// 지운 코드까지 담기고, MAX_DIFF_BYTES에서 잘리면 앞쪽 커밋만 남는다 — 2026-09-13 PR #32에서
+// 이미 삭제된 훅에 CRITICAL을 내고(거짓 경보) 뒤 커밋은 못 봤다(거짓 GREEN).
+// *.jsonl은 append-only 로그라 리뷰할 로직이 없고 예산만 먹는다(#32: 331KB 중 159KB).
+export function diffArgs(base, head) {
+  return ['diff', `${base}...${head}`, '--', '.', ':(exclude)*.jsonl'];
+}
+
 function getDiff() {
-  // PR 번호가 있으면 gh로(포크·리모트 무관), 없으면 로컬 git base...head.
   if (PR) {
-    try { return sh('gh', ['pr', 'diff', PR, '--patch']); }
-    catch (e) { console.error('gh pr diff 실패, git fallback:', e.message); }
+    try {
+      const baseRef = sh('gh', ['pr', 'view', PR, '--json', 'baseRefName', '--jq', '.baseRefName']);
+      const headRef = `refs/ultra/pr-${PR}`;
+      // 포크 PR도 pull/N/head로 받는다. base도 새로 받아야 merge-base가 stale하지 않다.
+      sh('git', ['fetch', '-q', 'origin', `+pull/${PR}/head:${headRef}`, `+${baseRef}:refs/remotes/origin/${baseRef}`]);
+      return sh('git', diffArgs(`origin/${baseRef}`, headRef));
+    } catch (e) {
+      console.error('PR net diff 실패, gh pr diff(net) fallback:', e.message);
+      try { return sh('gh', ['pr', 'diff', PR]); }
+      catch (e2) { console.error('gh pr diff 실패, git fallback:', e2.message); }
+    }
   }
-  try { return sh('git', ['diff', `${BASE}...${HEAD}`]); }
+  try { return sh('git', diffArgs(BASE, HEAD)); }
   catch (e) { console.error('git diff 실패:', e.message); return ''; }
 }
 
@@ -192,15 +208,16 @@ async function scoreIssue(issue, diff) {
 
 // --- 5. 코멘트 조립 ----------------------------------------------------------
 
-function buildComment(issues, meta = {}) {
-  const { failedLenses = [], unscored = [] } = meta;
+export function buildComment(issues, meta = {}) {
+  const { failedLenses = [], unscored = [], truncated = null } = meta;
   const order = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
   issues.sort((a, b) => (order[a.severity] ?? 9) - (order[b.severity] ?? 9));
-  const incomplete = failedLenses.length || unscored.length;
+  // 잘린 diff도 불완전이다 — 안 본 부분의 "이슈 없음"은 증거가 아니다.
+  const incomplete = failedLenses.length || unscored.length || truncated;
   const lines = [`### Ultra Review (cloud)`, ``];
   // issue #19 HIGH-2: 렌즈/채점 실패 시 불완전 경고 — "이슈 없음"을 GREEN으로 오신뢰 금지.
   if (incomplete) {
-    lines.push(`> ⚠️ **리뷰 불완전** — ${failedLenses.length ? `렌즈 파싱실패: ${failedLenses.join('·')}. ` : ''}${unscored.length ? `채점실패 ${unscored.length}건(아래 미채점). ` : ''}이 결과를 GREEN으로 신뢰하지 말 것.`, ``);
+    lines.push(`> ⚠️ **리뷰 불완전** — ${failedLenses.length ? `렌즈 파싱실패: ${failedLenses.join('·')}. ` : ''}${unscored.length ? `채점실패 ${unscored.length}건(아래 미채점). ` : ''}${truncated ? `diff ${truncated.total}B 중 앞 ${truncated.limit}B만 검토. ` : ''}이 결과를 GREEN으로 신뢰하지 말 것.`, ``);
   }
   if (!issues.length && !unscored.length) {
     lines.push(incomplete ? '확신도 통과 이슈 없음 (단 위 불완전 경고 참조).' : `이슈 없음. 버그·보안·CLAUDE.md·형제경로 렌즈로 검토함 (확신도 ${CONFIDENCE_MIN}+ 필터).`);
@@ -227,8 +244,9 @@ function buildComment(issues, meta = {}) {
 async function main() {
   const diff = getDiff();
   if (!diff) { console.log('빈 diff — 리뷰할 변경 없음. 종료.'); return; }
-  if (diff.length > MAX_DIFF_BYTES) {
-    console.error(`⚠️ diff ${diff.length}B > ${MAX_DIFF_BYTES}B 상한 — 앞부분만 리뷰(truncate).`);
+  const truncated = diff.length > MAX_DIFF_BYTES ? { total: diff.length, limit: MAX_DIFF_BYTES } : null;
+  if (truncated) {
+    console.error(`⚠️ diff ${diff.length}B > ${MAX_DIFF_BYTES}B 상한 — 앞부분만 리뷰(truncate). 불완전으로 판정.`);
   }
   const clipped = diff.slice(0, MAX_DIFF_BYTES);
   console.log(`diff ${diff.length}B, PR=${PR || '(local)'} base=${BASE} model=${REVIEW_MODEL}`);
@@ -246,7 +264,7 @@ async function main() {
   const failedLenses = LENSES.filter((_, i) => lensResults[i].failed).map(l => l.key);
   const found = lensResults.flatMap(r => r.issues);
   console.log(`렌즈 raw 이슈 ${found.length}건, 실패 렌즈 ${failedLenses.length}(${failedLenses.join(',')})`);
-  if (!found.length) { await emit(buildComment([], { failedLenses })); return gateExit(failedLenses, []); }
+  if (!found.length) { await emit(buildComment([], { failedLenses, truncated })); return gateExit(failedLenses, [], truncated); }
 
   // 병렬 확신도 채점 → 필터. null=채점실패는 드롭 말고 unscored로 표면화(false GREEN 봉쇄).
   // 채점은 이슈당 CLI 세션 1개라 무제한 팬아웃 금지 — 러너 메모리 보호를 위해 동시 4건으로 제한.
@@ -255,8 +273,8 @@ async function main() {
   const unscored = scored.filter(i => i.score === null);
   console.log(`확신도 ${CONFIDENCE_MIN}+ 통과 ${kept.length}/${scored.length}건, 미채점 ${unscored.length}`);
 
-  await emit(buildComment(kept, { failedLenses, unscored }));
-  return gateExit(failedLenses, unscored);
+  await emit(buildComment(kept, { failedLenses, unscored, truncated }));
+  return gateExit(failedLenses, unscored, truncated);
 }
 
 // 동시 실행 상한이 있는 map — 순서는 입력과 동일하게 유지한다.
@@ -275,9 +293,9 @@ async function mapLimit(items, limit, fn) {
 // 불완전 리뷰는 job을 실패시킨다. 코멘트에 경고를 찍어도 exit 0이면 머지 게이트 입장에서는 GREEN이라
 // "0줄 검토 = 이슈 없음"이 통과한다 — 실제로 인증 실패로 4개 렌즈가 전멸했는데 job은 success였다
 // (2026-09-11 실측). 검증은 stdout 문구가 아니라 exit code로 한다.
-function gateExit(failedLenses, unscored) {
-  if (!failedLenses.length && !unscored.length) return;
-  console.error(`리뷰 불완전 — 실패 렌즈 ${failedLenses.length}(${failedLenses.join(',') || '없음'}), 미채점 ${unscored.length}. GREEN 금지.`);
+function gateExit(failedLenses, unscored, truncated = null) {
+  if (!failedLenses.length && !unscored.length && !truncated) return;
+  console.error(`리뷰 불완전 — 실패 렌즈 ${failedLenses.length}(${failedLenses.join(',') || '없음'}), 미채점 ${unscored.length}${truncated ? `, diff 잘림 ${truncated.total}B>${truncated.limit}B` : ''}. GREEN 금지.`);
   process.exit(4);
 }
 
