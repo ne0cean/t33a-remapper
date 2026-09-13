@@ -29,7 +29,7 @@ const NO_POST = args.includes('--no-post') || DRY;
 
 const REPO = process.env.GITHUB_REPOSITORY || '';
 const PR = process.env.PR_NUMBER || '';
-const BASE = process.env.BASE_REF || 'master';
+const BASE = process.env.BASE_REF || 'main';
 const HEAD = process.env.HEAD_REF || 'HEAD';
 const REVIEW_MODEL = process.env.REVIEW_MODEL || 'claude-opus-4-8';
 const SCORE_MODEL = process.env.SCORE_MODEL || 'claude-haiku-4-5-20251001';
