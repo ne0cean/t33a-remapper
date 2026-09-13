@@ -1,5 +1,9 @@
 # Current Status
 
+## ✅ 2026-09-13 — ultra 워크플로 이식 (PR #1 머지 `a9549ae`)
+- `.github/workflows/ultra-review.yml` + `scripts/ultra-review.mjs`(hsc 포팅본, BASE_REF=main) — 09-11 "CRITICAL 랜딩 경로 막힘" 메모 해소. 단 **주경로는 `/ultra`(맥 헤드리스, 구독)**라 워크플로는 credits 소진 시 폴백(`--via=action`)이며, 폴백 활성엔 레포 시크릿 `CLAUDE_CODE_OAUTH_TOKEN` 필요(미등록, 불급).
+- 잔여: 워치독 자연사 e2e 1회(미변).
+
 ## ✅ 2026-09-11 — 맥 복구 데몬 능동형 전환(v1→v4) + 2단 리뷰 (커밋 `78ff7b3`·`a757114`·`8467295`)
 "폰 재부팅됐어 복구해"로 시작 → `t33a-revive.sh` 1회로 즉시 복구(status=waiting, 리모컨 미연결만 남음). 여기서 **진짜 문제가 드러남**.
 - **15시간 방치의 정체 = 맥 데몬이 수동형이었다**. 09-11 02:57 재부팅(삼성 자동 재시작), Termux:Boot의 boot.sh는 10:58에야 기동, 17:51까지 relay 부활 실패. 사용자 반문("대부분 재부팅은 같은 네트워크에서 이뤄졌는데 이상한데?")이 정확했다 — **10:58~11:49 폰이 집 Wi-Fi에 있었는데도 복구 0건**. `~/bin/t33a-auto-tcpip.sh`(launchd `com.ateam.t33a-tcpip`)가 `adb devices`에 폰이 *저절로 뜨기*만 기다렸고, 그 자동 등장은 adb mDNS 자동연결 이벤트 의존이라 놓치면 영영 안 온다. 17:49 Wi-Fi 재접속 announce를 우연히 잡아 부활한 것 = 운.
