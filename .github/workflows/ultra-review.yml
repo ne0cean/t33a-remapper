@@ -1,0 +1,65 @@
+name: Ultra Review (CRITICAL tier — cloud)
+
+# 왜: CRITICAL 등급 PR의 ultra 리뷰를 터미널-free로. review-pr이 CRITICAL 판정 시
+# scripts/ultra-review-dispatch.sh가 PR에 'needs-ultra' 라벨 → 이 워크플로가 서버사이드로
+# 다에이전트 리뷰를 돌려 PR 코멘트로 남긴다. 사람은 어디서든 코멘트만 읽는다.
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'PR number to review'
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  ultra-review:
+    # 라벨 트리거는 needs-ultra일 때만. 수동 dispatch는 항상.
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'needs-ultra'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
+      # ⚠️ ULTRA_REVIEW_USE_SDK=1 로 전환하면 scripts/ultra-review.mjs:74의 `import("@anthropic-ai/sdk")`가
+      #    의존성 부재로 즉시 실패한다(#23 ultra LOW-19). CLI 경로만 배선돼 있으므로, SDK 경로를 쓰려면
+      #    여기 설치를 추가하거나 그 분기를 제거해야 한다 — 형제 경로를 정리도 유지도 하지 않은 상태.
+      # 리뷰어(scripts/ultra-review.mjs)는 node 내장 모듈 + claude CLI만 쓴다. 대상 repo에 package.json이 없으면
+      # (타 repo 이식, 2026-09-12 hsc 실측 ENOENT) npm ci가 워크플로를 죽이므로 조건부.
+      - name: Install deps
+        run: |
+          if [ -f package.json ]; then npm ci || npm install; fi
+          npm install -g @anthropic-ai/claude-code
+
+      - name: Resolve PR number
+        id: pr
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "num=${{ github.event.inputs.pr }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "num=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # 인증은 구독 OAuth 토큰. 의장 계정은 구독형이라 raw API 키가 존재하지 않는다 —
+      # 키를 넣던 구 배선은 빈 값으로 주입돼 4개 렌즈가 전부 auth 실패했다(2026-09-11).
+      # 발급: 로컬에서 `claude setup-token` → 레포 시크릿 CLAUDE_CODE_OAUTH_TOKEN.
+      - name: Run ultra review
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr.outputs.num }}
+        run: node scripts/ultra-review.mjs
