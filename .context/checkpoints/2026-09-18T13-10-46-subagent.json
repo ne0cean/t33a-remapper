@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-09-18T13:10:46.422Z",
+  "subagent_input": {
+    "session_id": "28d5bd0e-abf9-4a66-bc8a-6ba62e9582e1",
+    "transcript_path": "/Users/noir/.claude/projects/-Users-noir/28d5bd0e-abf9-4a66-bc8a-6ba62e9582e1.jsonl",
+    "cwd": "/Users/noir/Projects/t33a-remapper",
+    "scratchpad_dir": "/private/tmp/claude-501/-Users-noir/28d5bd0e-abf9-4a66-bc8a-6ba62e9582e1/scratchpad",
+    "prompt_id": "cbda86ef-ebd9-4b0f-91f4-fd0dea908c1c",
+    "permission_mode": "bypassPermissions",
+    "agent_id": "a4f0b8849850faf03",
+    "agent_type": "coder",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "SubagentStop",
+    "stop_hook_active": false,
+    "agent_transcript_path": "/Users/noir/.claude/projects/-Users-noir/28d5bd0e-abf9-4a66-bc8a-6ba62e9582e1/subagents/agent-a4f0b8849850faf03.jsonl",
+    "last_assistant_message": "패치 완료 (교체 1건, 9줄 추가). bash -n: OK. git diff --stat: `scripts/t33a_boot.sh | 9 +++++++++, 1 file changed, 9 insertions(+)`. 커밋 안 함.\n\n`/Users/noir/Projects/t33a-remapper/scripts/t33a_boot.sh` 344행 부근 확인 완료.",
+    "background_tasks": [
+      {
+        "id": "a4f0b8849850faf03",
+        "type": "subagent",
+        "status": "running",
+        "description": "Patch t33a watchdog recovery state",
+        "agent_type": "coder"
+      }
+    ],
+    "session_crons": []
+  },
+  "changed_files": [
+    "scripts/t33a_boot.sh"
+  ],
+  "changed_count": 1,
+  "status": "clean",
+  "phase": "unknown",
+  "resume_prompt": "/pickup"
+}

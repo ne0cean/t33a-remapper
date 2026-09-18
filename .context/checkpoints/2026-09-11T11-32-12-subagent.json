@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-09-11T11:32:12.198Z",
+  "subagent_input": {
+    "session_id": "992a8e1b-4131-464d-a080-12a459552eb3",
+    "transcript_path": "/Users/noir/.claude/projects/-Users-noir/992a8e1b-4131-464d-a080-12a459552eb3.jsonl",
+    "cwd": "/Users/noir/Projects/t33a-remapper",
+    "scratchpad_dir": "/private/tmp/claude-501/-Users-noir/992a8e1b-4131-464d-a080-12a459552eb3/scratchpad",
+    "prompt_id": "3b97b205-4b82-479f-95c1-5c169b5cf732",
+    "permission_mode": "bypassPermissions",
+    "agent_id": "ac8f4a5b80a35dab9",
+    "agent_type": "",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "SubagentStop",
+    "stop_hook_active": false,
+    "agent_transcript_path": "/Users/noir/.claude/projects/-Users-noir/992a8e1b-4131-464d-a080-12a459552eb3/subagents/agent-ac8f4a5b80a35dab9.jsonl",
+    "last_assistant_message": "Comparing v1 and v2 recovery logic",
+    "background_tasks": [
+      {
+        "id": "ad2a6fcb31e1810d9",
+        "type": "subagent",
+        "status": "running",
+        "description": "Review daemon rewrite diff",
+        "agent_type": "review-pr"
+      }
+    ],
+    "session_crons": []
+  },
+  "changed_files": [],
+  "changed_count": 0,
+  "status": "clean",
+  "phase": "unknown",
+  "resume_prompt": "/pickup"
+}

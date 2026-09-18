@@ -1,8 +1,17 @@
 # Current Status
 
+## ✅ 2026-09-18 — 18h 다운 진단 + 원격 복구알림 고착 결함 수리 (커밋 `6207b26`)
+- 09-18 03:00경~21:05 **약 18시간** 리매퍼 다운. 원인=폰이 집 LAN 밖(외부망)이라 맥 복구 데몬이 닿지 못함 — **구조적 한계의 정상 동작**, 새 버그 아님.
+- 21:05:14~21:05:26 폰이 집 LAN 복귀하자 맥 데몬(`com.ateam.t33a-tcpip`, 15s 주기)이 **12초 만에 자동 복구**: `adb tcpip 5555` → relay 직접 재기동 → `✅ 복구 확인 (AGE=0 WHB=4 REMAP=2 RELAY=1 PORT=5555 ST=waiting OK=1)`, FAILS=0.
+- **"워치독 자연사 e2e" 잔여과제 종결**: 19:50:59 폰이 텔레그램 dead 알림을 실제 발송. 증거=`/sdcard/Download/t33a_remote_state`에 `dead 1789728659`(curl -sf 성공 후에만 쓰이는 설계) → 자연 트리거 발화 확인, 08-12부터 미검증이던 항목 CLOSED.
+- **새 결함 발견·수리**: 맥 데몬이 relay를 직접 살리면 폰 워치독은 `start_relay` 분기를 안 타 `notify_remote_recovered`가 호출 안 됨 → REMOTE_STATE가 `dead`로 고착. 실측: 21:05 복구됐는데 22:10 시점에도 state=`dead 1789728659`, "복구됨" 알림 0건. 부작용 2개: ①복구 사실을 원격에서 영영 모름 ②state가 낡은 ts로 남아 신규 장애가 최대 3h 침묵(3h 리마인드 게이트 기준점이 낡음).
+- **수리**: 워치독 건강 틱(AGE<20)에서도 REMOTE_STATE가 `alive`가 아니면 `notify_remote_recovered` 호출(alive면 no-op, /sdcard 반복 기록 없음). `bash -n` PASS.
+- 트리거 규명: 복구 트리거는 **같은 LAN 연결뿐** — 세션·터미널·사람 행동 무관. 맥 launchd RunAtLoad+KeepAlive 상시 데몬이 15s마다 `adb connect` → 실패 시 `adb mdns services` 능동 조회 → 시리얼(R3CXA0DKVVV) 폴백. 폰 외부망 또는 맥 off면 복구 불가(기존 구조적 한계 그대로).
+- ✅ **배포·라이브 검증 완료**: 22:12:48 폰 반영(boot.sh REMOTE_STATE 참조 5→7), 22:13 state `dead 1789728659`→`alive` 전환 실측. daemon=waiting heartbeat=0s.
+
 ## ✅ 2026-09-13 — ultra 워크플로 이식 (PR #1 머지 `a9549ae`)
 - `.github/workflows/ultra-review.yml` + `scripts/ultra-review.mjs`(hsc 포팅본, BASE_REF=main) — 09-11 "CRITICAL 랜딩 경로 막힘" 메모 해소. 단 **주경로는 `/ultra`(맥 헤드리스, 구독)**라 워크플로는 credits 소진 시 폴백(`--via=action`)이며, 폴백 활성엔 레포 시크릿 `CLAUDE_CODE_OAUTH_TOKEN` 필요(미등록, 불급).
-- 잔여: 워치독 자연사 e2e 1회(미변).
+- ✅ 잔여였던 "워치독 자연사 e2e" 09-18 종결(텔레그램 dead 실발송 확인).
 
 ## ✅ 2026-09-11 — 맥 복구 데몬 능동형 전환(v1→v4) + 2단 리뷰 (커밋 `78ff7b3`·`a757114`·`8467295`)
 "폰 재부팅됐어 복구해"로 시작 → `t33a-revive.sh` 1회로 즉시 복구(status=waiting, 리모컨 미연결만 남음). 여기서 **진짜 문제가 드러남**.

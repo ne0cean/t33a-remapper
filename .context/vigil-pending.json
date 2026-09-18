@@ -1,0 +1,20 @@
+[
+  {
+    "queued_at": "2026-09-18T13:12:26.980Z",
+    "changed_files": [
+      ".context/CURRENT.md",
+      ".context/SESSIONS.md"
+    ],
+    "checkpoint": "2026-09-18T13-12-26-subagent.json",
+    "source": "SubagentStop"
+  },
+  {
+    "queued_at": "2026-09-18T13:12:33.161Z",
+    "changed_files": [
+      ".context/CURRENT.md",
+      ".context/SESSIONS.md"
+    ],
+    "checkpoint": "2026-09-18T13-12-33-subagent.json",
+    "source": "SubagentStop"
+  }
+]

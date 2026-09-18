@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-09-11T11:59:59.250Z",
+  "subagent_input": {
+    "session_id": "992a8e1b-4131-464d-a080-12a459552eb3",
+    "transcript_path": "/Users/noir/.claude/projects/-Users-noir/992a8e1b-4131-464d-a080-12a459552eb3.jsonl",
+    "cwd": "/Users/noir/Projects/t33a-remapper",
+    "scratchpad_dir": "/private/tmp/claude-501/-Users-noir/992a8e1b-4131-464d-a080-12a459552eb3/scratchpad",
+    "prompt_id": "750e6bf7-b31a-45e6-8e05-6e74cefc671a",
+    "permission_mode": "bypassPermissions",
+    "agent_id": "acb5f04f2d14d372b",
+    "agent_type": "",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "SubagentStop",
+    "stop_hook_active": false,
+    "agent_transcript_path": "/Users/noir/.claude/projects/-Users-noir/992a8e1b-4131-464d-a080-12a459552eb3/subagents/agent-acb5f04f2d14d372b.jsonl",
+    "last_assistant_message": "Confirming supervisor/worker fork in t33a_remap.c",
+    "background_tasks": [
+      {
+        "id": "ab0e9d8c9d59657b4",
+        "type": "subagent",
+        "status": "running",
+        "description": "Adversarial second-lens review of v3",
+        "agent_type": "adversarial"
+      }
+    ],
+    "session_crons": []
+  },
+  "changed_files": [],
+  "changed_count": 0,
+  "status": "clean",
+  "phase": "unknown",
+  "resume_prompt": "/pickup"
+}
