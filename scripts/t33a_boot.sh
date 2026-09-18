@@ -343,6 +343,15 @@ while true; do
     AGE=$((NOW - MTIME))
     if [ "$AGE" -lt 20 ]; then
         FAILS=0
+        # 맥 복구 데몬 등 "외부 주체"가 relay 를 살리면 이 루프는 start_relay 를 안 타므로
+        # REMOTE_STATE 가 dead 로 고착 → "복구됨" 알림이 영영 안 나간다.
+        # 2026-09-18 실측: 19:51 dead 텔레그램 발송 후 21:05 맥 데몬이 relay 직접 재기동해
+        #   복구했으나 state=dead 잔류, 복구 알림 0건.
+        # 건강한 틱에서도 판정한다. alive 면 no-op 이라 /sdcard 반복 기록 없음.
+        case "$(cat "$REMOTE_STATE" 2>/dev/null)" in
+            alive) : ;;
+            *) notify_remote_recovered ;;
+        esac
     else
         RPID=$(cat "$RELAY_PID" 2>/dev/null)
         echo "$(date): relay dead (heartbeat ${AGE}s, PID $RPID) — restarting" >> "$LOG"
