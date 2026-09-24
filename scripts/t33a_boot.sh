@@ -330,6 +330,31 @@ else
 fi
 unset _HB_Q _HB_Q_AGE
 
+# ── 상시 상태 알림 ──────────────────────────────────────────────
+# 위젯을 탭해야만 알 수 있으면 "확인"이 하나의 작업이 된다. 알림창을 내리면
+# 바로 보이게 둔다 — 무음·min 우선순위·ongoing(실수로 쓸어내 사라지지 않게).
+# 15s 틱마다 알림 프로세스를 띄우면 낭비라 상태가 바뀔 때 + 5분마다만 갱신한다.
+NOTIF_STATE=/sdcard/Download/t33a_notif_state   # "<alive|dead> <ts>"
+update_live_notification() {   # $1=alive|dead  $2=heartbeat age
+    command -v termux-notification >/dev/null 2>&1 || return 0
+    local prev pts now title content
+    now=$(date +%s)
+    prev=$(cut -d' ' -f1 "$NOTIF_STATE" 2>/dev/null)
+    pts=$(cut -d' ' -f2 "$NOTIF_STATE" 2>/dev/null)
+    case "$pts" in ''|*[!0-9]*) pts=0 ;; esac
+    [ "$prev" = "$1" ] && [ $((now - pts)) -lt 300 ] && return 0
+    echo "$1 $now" > "$NOTIF_STATE"
+    if [ "$1" = "alive" ]; then
+        title="T33A ✅ 동작 중"
+        content="리모컨 리매핑 정상 — $(date '+%H:%M') 확인"
+    else
+        title="T33A ❌ 멈춤"
+        content="리모컨 키가 원래 기능으로 샌다 — T33A 위젯 1회 탭"
+    fi
+    termux-notification --id t33a_live --title "$title" --content "$content" \
+        --priority min --ongoing --alert-once 2>/dev/null || true
+}
+
 # ── Termux 상주 watchdog ────────────────────────────────────────
 # relay는 PPID=1이므로 거의 죽지 않음.
 # 15초마다 heartbeat 확인 → 죽으면 ADB로 재시작.
@@ -358,6 +383,7 @@ while true; do
             alive) : ;;
             *) notify_remote_recovered ;;
         esac
+        update_live_notification alive "$AGE"
     else
         RPID=$(cat "$RELAY_PID" 2>/dev/null)
         echo "$(date): relay dead (heartbeat ${AGE}s, PID $RPID) — restarting" >> "$LOG"
@@ -365,9 +391,11 @@ while true; do
         if connect_adb && start_relay; then
             ensure_bluetooth_on   # relay 재시작 시 ADB_TARGET 재활용해 BT도 확인(60s 스로틀)
             notify_remote_recovered   # 죽었다 살아났으면 원격 "복구됨" 알림
+            update_live_notification alive 0
             FAILS=0
         else
             notify_adb_needed
+            update_live_notification dead "$AGE"
             FAILS=$((FAILS + 1))
         fi
     fi

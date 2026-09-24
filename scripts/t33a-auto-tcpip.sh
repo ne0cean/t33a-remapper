@@ -21,10 +21,18 @@
 #     ⑦ 폰에서 온 status 문자열을 osascript 에 넣기 전 sanitize.
 #     ⑧ IP 정규식의 리터럴 dot 이스케이프 + IP 가 바뀌어도 시리얼로 찾아가는 폴백.
 
+#  v5 — 레버 능동 유지: 붙어 있는 동안 무선 디버깅 플래그와 classic 5555 를
+#     *고장나기 전에* 켜 둔다. v4 까지는 둘 다 "이상 확정" 분기 안에서만 켰다 —
+#     즉 폰이 건강하지만 5555 가 꺼진 상태(재부팅 후 TLS 로만 붙은 경우)를 방치했고,
+#     그 상태에서 맥이 자리를 뜨면 폰의 위젯·boot.sh loopback 이 못 붙어 자력복구 불가.
+#     tcpip 는 adbd 를 재시작시켜 relay 를 죽이므로(2026-06 실측) 포트가 이미 5555 면
+#     건드리지 않고, 켤 때는 쿨다운 1회 + relay 재기동·검증을 동반한다.
+
 LOG=/tmp/t33a-tcpip.log
 STATEDIR=/tmp
 FAILS_FILE="$STATEDIR/t33a-tcpip.fails"
 LOCK_PIDF="$STATEDIR/t33a-tcpip.pid"
+LEVER_TS_FILE="$STATEDIR/t33a-tcpip.lever_ts"
 ADB=/opt/homebrew/bin/adb
 PHONE_IP="${T33A_IP:-192.168.0.18}"
 PHONE_SERIAL="${T33A_SERIAL:-R3CXA0DKVVV}"
@@ -34,6 +42,7 @@ STALE=90             # relay_hb 이 나이를 넘으면 relay 사망(초)
 WORKER_STALE=150     # worker heartbeat 주기 60s → 2.5배 여유(초)
 CONFIRM_WAIT=15      # 파괴적 조치 전 2차 확인 간격(초)
 AWAY_BACKOFF=60      # 폰이 LAN 에 없을 때 대기(초)
+LEVER_COOLDOWN=600   # tcpip 레버 재시도 최소 간격(초) — 실패해도 매 틱 relay 를 죽이지 않도록
 LOG_MAX=2000000      # 로그 상한(바이트)
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOG"; }
@@ -101,7 +110,42 @@ ensure_device() {
 # 폰 상태 1회 왕복 수집 → "AGE=<n> WHB=<n> REMAP=<개수> RELAY=<0|1> PORT=<n> ST=<status> OK=1"
 # RELAY 는 pid 존재만이 아니라 cmdline 까지 대조한다(PID 재사용 오탐 차단).
 probe() {
-    "$ADB" -s "$1" shell 'NOW=$(date +%s); HB=$(stat -c %Y /data/local/tmp/t33a.relay_hb 2>/dev/null || echo 0); WH=$(stat -c %Y /data/local/tmp/t33a.heartbeat 2>/dev/null || echo 0); RP=$(cat /data/local/tmp/t33a_relay.pid 2>/dev/null); [ -z "$RP" ] && RP=0; case "$RP" in *[!0-9]*) RP=0 ;; esac; RELAY=0; if [ "$RP" -gt 0 ] && [ -d /proc/$RP ]; then tr "\0" " " < /proc/$RP/cmdline 2>/dev/null | grep -q t33a_relay && RELAY=1; fi; echo "AGE=$((NOW-HB)) WHB=$((NOW-WH)) REMAP=$(pidof t33a_remap | wc -w) RELAY=$RELAY PORT=$(getprop service.adb.tcp.port) ST=$(cat /data/local/tmp/t33a.status 2>/dev/null | tr -cd "A-Za-z:_") OK=1"' 2>/dev/null | tr -d '\r'
+    "$ADB" -s "$1" shell 'NOW=$(date +%s); HB=$(stat -c %Y /data/local/tmp/t33a.relay_hb 2>/dev/null || echo 0); WH=$(stat -c %Y /data/local/tmp/t33a.heartbeat 2>/dev/null || echo 0); RP=$(cat /data/local/tmp/t33a_relay.pid 2>/dev/null); [ -z "$RP" ] && RP=0; case "$RP" in *[!0-9]*) RP=0 ;; esac; RELAY=0; if [ "$RP" -gt 0 ] && [ -d /proc/$RP ]; then tr "\0" " " < /proc/$RP/cmdline 2>/dev/null | grep -q t33a_relay && RELAY=1; fi; echo "AGE=$((NOW-HB)) WHB=$((NOW-WH)) REMAP=$(pidof t33a_remap | wc -w) RELAY=$RELAY PORT=$(getprop service.adb.tcp.port) WIFI=$(settings get global adb_wifi_enabled 2>/dev/null | tr -cd "0-9") ST=$(cat /data/local/tmp/t33a.status 2>/dev/null | tr -cd "A-Za-z:_") OK=1"' 2>/dev/null | tr -d '\r'
+}
+
+# 붙어 있는 동안 두 레버를 켜 둔다. 건강할 때 호출한다 — 고장난 뒤가 아니라.
+# ① adb_wifi_enabled: 부작용 없음(adbd 재시작 안 함) → 꺼져 있으면 즉시 켠다.
+# ② service.adb.tcp.port=5555: 켜는 행위가 adbd 를 재시작시켜 relay 를 죽인다.
+#    그래서 이미 5555 면 절대 건드리지 않고, 켤 때는 relay 재기동까지 책임진다.
+keep_levers() {
+    local dev="$1" p="$2" wifi port now last nd i pp
+    wifi=$(field "$p" WIFI); port=$(field "$p" PORT)
+
+    if [ "$wifi" != "1" ]; then
+        "$ADB" -s "$dev" shell "settings put global adb_wifi_enabled 1" >/dev/null 2>&1
+        log "[$dev] 무선 디버깅 꺼져 있었음(=${wifi:-빈값}) → 켬"
+    fi
+
+    [ "$port" = "5555" ] && return 0
+
+    now=$(date +%s)
+    last=$(cat "$LEVER_TS_FILE" 2>/dev/null)
+    case "$last" in ''|*[!0-9]*) last=0 ;; esac
+    [ $((now - last)) -lt "$LEVER_COOLDOWN" ] && return 0
+    echo "$now" > "$LEVER_TS_FILE"
+
+    log "[$dev] 정상이지만 tcp port=${port:-빈값} → 자력복구용 5555 활성화 (relay 재기동 동반)"
+    "$ADB" -s "$dev" tcpip 5555 >/dev/null 2>&1
+    sleep 5
+    "$ADB" connect "$PHONE_IP:5555" >/dev/null 2>&1
+    nd=$(ensure_device); [ -n "$nd" ] && dev="$nd"
+    "$ADB" -s "$dev" shell "pkill -x t33a_remap 2>/dev/null; rm -f $HB_REMOTE; setsid /system/bin/sh $RELAY_SH < /dev/null > /dev/null 2>&1 &" >/dev/null 2>&1
+    for i in $(seq 1 20); do
+        sleep 3
+        pp=$(probe "$dev")
+        if assess "$pp"; then log "[$dev] ✅ 5555 활성 + relay 복구 ($pp)"; return 0; fi
+    done
+    log "[$dev] ⚠️ 5555 는 켰으나 relay 미복구 — 다음 사이클 복구 분기에 위임"
 }
 
 field() { echo "$1" | tr ' ' '\n' | sed -n "s/^$2=//p" | head -1; }
@@ -119,7 +163,7 @@ assess() {
     return 0
 }
 
-log "=== t33a-auto-tcpip v4 started (PID $$, 이월 FAILS=$FAILS) ==="
+log "=== t33a-auto-tcpip v5 started (PID $$, 이월 FAILS=$FAILS) ==="
 STATE=unknown   # alive | dead | away
 
 while true; do
@@ -142,6 +186,7 @@ while true; do
         [ "$STATE" != "alive" ] && log "[$DEV] 정상 ($P)"
         STATE=alive
         [ "$FAILS" -gt 0 ] && set_fails $((FAILS-1))   # 리셋이 아니라 감쇠(플래핑 대비)
+        keep_levers "$DEV" "$P"
         continue
     fi
 
