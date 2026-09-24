@@ -1,5 +1,16 @@
 # Current Status
 
+## ✅ 2026-09-25 — 폰 상태 확인 위젯 + 맥 레버 능동 유지 (커밋 `c1997e7`, main 머지·push 완료)
+- **읽기 전용 상태 위젯 신설** `scripts/t33a_status.sh` + `T33A_status_wrapper` → `~/.shortcuts/T33A-status`. 기존 T33A 위젯은 *복구* 동작이라 "살아있나" 확인하려고 누르면 멀쩡한 watchdog을 kill·재기동한다 — 확인과 조치를 분리했다. 출력=판정 1줄(`[OK]살아있음`/`[??]이상`/`[XX]죽음`) + relay/worker heartbeat 나이·status·watchdog PID·adb 포트·boot.log 5줄, 토스트 1줄 요약.
+- **라이브 실측으로 설계 1건 정정**: 초안은 relay PID 생존을 `[ -d /proc/$PID ]`로 봤는데 Termux uid는 hidepid 때문에 shell uid 프로세스의 `/proc/<pid>`를 못 본다 → 정상인데 "이상" 오보. 판정에서 제외하고 참고 출력으로 강등(폰에서 `[OK] 살아있음 / status=waiting / relay hb 1s` 실행 확인).
+- **맥 데몬 v4→v5 `keep_levers()`**: 붙어 있는 동안 `adb_wifi_enabled=1`·classic 5555를 *고장나기 전에* 켜 둔다. v4는 둘 다 "이상 확정" 분기에서만 켜서, 폰이 건강한데 5555만 꺼진 상태(재부팅 후 TLS로만 붙은 경우)를 방치 → 맥이 자리를 뜨면 폰 위젯·boot.sh loopback이 못 붙어 **자력복구 불가**였다.
+- 재부팅 직후 무선 디버깅을 맥이 켜는 것은 **원리상 불가**(켜려면 이미 붙어 있어야 함) — 그 자리는 폰 WADB Keeper가 유일 주체라는 점 재확인. 맥이 할 수 있는 건 "붙어 있는 동안 레버 유지"까지다.
+- **리뷰(review-pr, HIGH) 지적 2건 머지 전 수리**: ①`keep_levers`가 tcpip 후 relay 상태를 안 보고 무조건 재기동 — 기존 복구 분기는 RELAY 확인 후 조건부라 **형제경로 비대칭**(불변식③ → HIGH 승격). probe→assess→RELAY 조건부로 대칭화. ②알림(20s)과 상태 위젯(90s) 임계값 불일치로 상반 신호 가능 → 판정을 `update_live_notification` 한 곳으로 모으고 90s 통일.
+- **상시 상태 알림**(boot.sh, ongoing·min·무음) 코드 추가. 단 **라이브 미검증** — Termux 4개 채널이 전부 `importance=NONE`(의장이 직접 끔). 의장 판단으로 위젯만 유지, 알림은 켜는 즉시 자동 표시되도록 코드만 대기.
+- **미검증 1건**: 5555 레버 분기는 현재 포트가 이미 5555라 미발화 — 다음 재부팅 때 `/tmp/t33a-tcpip.log`로 자기검증된다.
+- 배포 일치 확인: GitHub·맥·폰 세 곳 c1997e7 동일, 파일 3종 md5 일치, `~/.shortcuts/T33A-status` 설치 확인. 맥 데몬 v5 재기동 후 `정상 (RELAY=1 PORT=5555 WIFI=1)`.
+- ⚠️ 잔여: 폰 자동 업데이트가 **이전 버전** update.sh로 돌아 status 동기화 항목이 빠졌다(`boot/relay/start`만 갱신). 파일은 수동 배포로 이미 일치하며, 다음 scripts 변경 커밋부터 새 루프가 흡수한다.
+
 ## ✅ 2026-09-18 — 18h 다운 진단 + 원격 복구알림 고착 결함 수리 (커밋 `6207b26`)
 - 09-18 03:00경~21:05 **약 18시간** 리매퍼 다운. 원인=폰이 집 LAN 밖(외부망)이라 맥 복구 데몬이 닿지 못함 — **구조적 한계의 정상 동작**, 새 버그 아님.
 - 21:05:14~21:05:26 폰이 집 LAN 복귀하자 맥 데몬(`com.ateam.t33a-tcpip`, 15s 주기)이 **12초 만에 자동 복구**: `adb tcpip 5555` → relay 직접 재기동 → `✅ 복구 확인 (AGE=0 WHB=4 REMAP=2 RELAY=1 PORT=5555 ST=waiting OK=1)`, FAILS=0.
