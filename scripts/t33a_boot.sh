@@ -335,16 +335,22 @@ unset _HB_Q _HB_Q_AGE
 # 바로 보이게 둔다 — 무음·min 우선순위·ongoing(실수로 쓸어내 사라지지 않게).
 # 15s 틱마다 알림 프로세스를 띄우면 낭비라 상태가 바뀔 때 + 5분마다만 갱신한다.
 NOTIF_STATE=/sdcard/Download/t33a_notif_state   # "<alive|dead> <ts>"
-update_live_notification() {   # $1=alive|dead  $2=heartbeat age
+NOTIF_STALE=90   # 표시 임계값 — 상태 위젯·맥 데몬 assess() 와 같은 90s.
+                 # 루프의 재시작 트리거(20s)보다 보수적이어야 한다: 20~90s 는
+                 # 재시작이 진행 중인 구간이라 "멈춤"으로 띄우면 위젯과 신호가 엇갈린다.
+update_live_notification() {   # $1=heartbeat age → alive/dead 판정은 여기 한 곳에서만
     command -v termux-notification >/dev/null 2>&1 || return 0
-    local prev pts now title content
+    local prev pts now title content verdict age
+    age="$1"
+    case "$age" in ''|*[!0-9]*) age=0 ;; esac
+    if [ "$age" -lt "$NOTIF_STALE" ]; then verdict=alive; else verdict=dead; fi
     now=$(date +%s)
     prev=$(cut -d' ' -f1 "$NOTIF_STATE" 2>/dev/null)
     pts=$(cut -d' ' -f2 "$NOTIF_STATE" 2>/dev/null)
     case "$pts" in ''|*[!0-9]*) pts=0 ;; esac
-    [ "$prev" = "$1" ] && [ $((now - pts)) -lt 300 ] && return 0
-    echo "$1 $now" > "$NOTIF_STATE"
-    if [ "$1" = "alive" ]; then
+    [ "$prev" = "$verdict" ] && [ $((now - pts)) -lt 300 ] && return 0
+    echo "$verdict $now" > "$NOTIF_STATE"
+    if [ "$verdict" = "alive" ]; then
         title="T33A ✅ 동작 중"
         content="리모컨 리매핑 정상 — $(date '+%H:%M') 확인"
     else
@@ -383,7 +389,7 @@ while true; do
             alive) : ;;
             *) notify_remote_recovered ;;
         esac
-        update_live_notification alive "$AGE"
+        update_live_notification "$AGE"
     else
         RPID=$(cat "$RELAY_PID" 2>/dev/null)
         echo "$(date): relay dead (heartbeat ${AGE}s, PID $RPID) — restarting" >> "$LOG"
@@ -391,11 +397,11 @@ while true; do
         if connect_adb && start_relay; then
             ensure_bluetooth_on   # relay 재시작 시 ADB_TARGET 재활용해 BT도 확인(60s 스로틀)
             notify_remote_recovered   # 죽었다 살아났으면 원격 "복구됨" 알림
-            update_live_notification alive 0
+            update_live_notification 0
             FAILS=0
         else
             notify_adb_needed
-            update_live_notification dead "$AGE"
+            update_live_notification "$AGE"
             FAILS=$((FAILS + 1))
         fi
     fi

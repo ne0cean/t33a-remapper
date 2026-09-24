@@ -134,12 +134,28 @@ keep_levers() {
     [ $((now - last)) -lt "$LEVER_COOLDOWN" ] && return 0
     echo "$now" > "$LEVER_TS_FILE"
 
-    log "[$dev] 정상이지만 tcp port=${port:-빈값} → 자력복구용 5555 활성화 (relay 재기동 동반)"
+    log "[$dev] 정상이지만 tcp port=${port:-빈값} → 자력복구용 5555 활성화"
     "$ADB" -s "$dev" tcpip 5555 >/dev/null 2>&1
     sleep 5
     "$ADB" connect "$PHONE_IP:5555" >/dev/null 2>&1
     nd=$(ensure_device); [ -n "$nd" ] && dev="$nd"
-    "$ADB" -s "$dev" shell "pkill -x t33a_remap 2>/dev/null; rm -f $HB_REMOTE; setsid /system/bin/sh $RELAY_SH < /dev/null > /dev/null 2>&1 &" >/dev/null 2>&1
+
+    # adbd 재시작이 relay 를 죽였는지 *확인하고* 대응한다. 무조건 재기동하면
+    # "tcpip 는 항상 relay 를 죽인다"는 전제가 어긋나는 날 멀쩡한 relay 를
+    # 매번 한 번 더 죽였다 살리게 된다. 아래 복구 분기와 같은 형태로 맞춘다.
+    pp=$(probe "$dev")
+    if assess "$pp"; then
+        log "[$dev] ✅ 5555 활성, relay 무사 ($pp)"
+        return 0
+    fi
+    if [ "$(field "$pp" RELAY)" = "1" ]; then
+        log "[$dev] 5555 활성 후 relay 생존(cmdline 확인) — remap 만 kill, 온디바이스 워치독에 위임"
+        "$ADB" -s "$dev" shell "pkill -x t33a_remap" >/dev/null 2>&1
+    else
+        log "[$dev] 5555 활성으로 relay 사망 — 직접 재기동"
+        "$ADB" -s "$dev" shell "pkill -x t33a_remap 2>/dev/null; rm -f $HB_REMOTE; setsid /system/bin/sh $RELAY_SH < /dev/null > /dev/null 2>&1 &" >/dev/null 2>&1
+    fi
+
     for i in $(seq 1 20); do
         sleep 3
         pp=$(probe "$dev")
