@@ -65,12 +65,15 @@ fi
 
 # [3] 스크립트 변경 시 /sdcard/Download로 복사
 if [ "$CHANGED_SCRIPTS" -gt 0 ]; then
-    for f in boot relay start; do
+    for f in boot relay start status; do
         src="$REPO/scripts/t33a_${f}.sh"
         dst="$SCRIPTS_DST/t33a_${f}.sh"
         [ -f "$src" ] && cp "$src" "$dst" && chmod +x "$dst"
     done
-    log "스크립트 갱신: boot/relay/start"
+    # 상태 위젯 래퍼 — boot.sh가 여기서 ~/.shortcuts/T33A-status 로 설치한다
+    [ -f "$REPO/scripts/T33A_status_wrapper" ] && \
+        cp "$REPO/scripts/T33A_status_wrapper" "$SCRIPTS_DST/T33A_status_wrapper"
+    log "스크립트 갱신: boot/relay/start/status"
 fi
 
 # [3.5] boot.sh 즉시 활성화 — $BOOT_DIR 설치 + watchdog 재시작

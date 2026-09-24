@@ -19,6 +19,7 @@ SRC=/sdcard/Download/t33a_boot.sh
 BOOT_DIR="$HOME/.termux/boot"
 SHORTCUT_DIR="$HOME/.shortcuts"
 WRAPPER=/sdcard/Download/T33A_wrapper
+STATUS_WRAPPER=/sdcard/Download/T33A_status_wrapper
 ADB=/data/data/com.termux/files/usr/bin/adb
 NOTIFY_FLAG=/sdcard/Download/t33a_notify_ts
 AUTO_PULL="$HOME/t33a-remapper/scripts/t33a_auto_pull.sh"
@@ -41,6 +42,11 @@ mkdir -p "$BOOT_DIR" "$SHORTCUT_DIR" 2>/dev/null
 #  폐기된 hsc_master.py 버전 FINAL_SNIPER를 재생성. 위젯 소유권은 각 프로젝트에 있다)
 if [ -f "$WRAPPER" ]; then
     cp "$WRAPPER" "$SHORTCUT_DIR/T33A" && chmod +x "$SHORTCUT_DIR/T33A"
+fi
+# T33A-상태 위젯 — 읽기 전용 확인용. T33A(복구)와 분리한다:
+# 살아있나 보려고 복구 위젯을 누르면 멀쩡한 watchdog을 kill·재기동하게 된다.
+if [ -f "$STATUS_WRAPPER" ]; then
+    cp "$STATUS_WRAPPER" "$SHORTCUT_DIR/T33A-status" && chmod +x "$SHORTCUT_DIR/T33A-status"
 fi
 
 echo "$(date): boot started (PID $$)" > "$LOG"
