@@ -11,8 +11,8 @@ OUT=/tmp/t33a-install.log
 ADB=/opt/homebrew/bin/adb
 exec 3>&1 >"$OUT" 2>&1
 
-cp ~/bin/t33a-auto-tcpip.sh ~/bin/t33a-auto-tcpip.sh.bak-$(date +%Y%m%d%H%M) 2>/dev/null
-cp "$REPO/scripts/t33a-auto-tcpip.sh" ~/bin/t33a-auto-tcpip.sh
+# 실행본은 레포 파일 심링크다(배포 드리프트 차단, 09-11). 복사로 덮지 않는다.
+[ -L ~/bin/t33a-auto-tcpip.sh ] || ln -sfn "$REPO/scripts/t33a-auto-tcpip.sh" ~/bin/t33a-auto-tcpip.sh
 cp "$REPO/scripts/com.ateam.t33a-adb-server.plist" "$LA/"
 
 launchctl bootout gui/$U/com.ateam.t33a-adb-server 2>/dev/null

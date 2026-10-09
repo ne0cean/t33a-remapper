@@ -1,0 +1,3 @@
+rc=1
+5555 열림인데 adb 미접속 — com.ateam.t33a-adb-server 미설치라 서버 교체 보류 (scripts/install-mac-agents.sh)
+listener before=38418 after=38418

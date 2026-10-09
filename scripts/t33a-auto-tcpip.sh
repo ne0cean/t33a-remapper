@@ -172,10 +172,22 @@ keep_levers() {
 # launchd 소유 서버(com.ateam.t33a-adb-server, nodaemon)는 붙는다(실측). 그래서
 # 포트는 열렸는데 못 붙고 + 5037 리스너가 그 에이전트가 아니면 → 갈아끼운다.
 # 0=교체함(재시도 가치 있음), 1=해당 없음.
+agent_pid() {  # launchd 에이전트 서버 PID. 미로드면 rc=1, 로드됐지만 스로틀 대기면 빈값.
+    local out
+    out=$(launchctl print "gui/$(id -u)/$ADB_AGENT" 2>/dev/null) || return 1
+    echo "$out" | sed -n 's/^[[:space:]]*pid = \([0-9]*\)$/\1/p' | head -1
+}
+
 heal_adb_server() {
-    local now last lpid apid
+    local now last lpid apid i
     nc -z -G 2 "$PHONE_IP" 5555 >/dev/null 2>&1 || return 1        # 폰이 정말 없음
-    apid=$(launchctl list "$ADB_AGENT" 2>/dev/null | sed -n 's/.*"PID" = \([0-9]*\);/\1/p')
+    # 에이전트가 없으면 교체할 대상이 없다 — kill-server 는 공용 서버만 죽이고
+    # 같은 막힌 형태로 되살아난다(리뷰 HIGH). 미설치 상태에선 아무것도 안 한다.
+    if ! apid=$(agent_pid); then
+        [ "${HEAL_WARNED:-0}" = 1 ] || log "5555 열림인데 adb 미접속 — $ADB_AGENT 미설치라 서버 교체 보류 (scripts/install-mac-agents.sh)"
+        HEAL_WARNED=1
+        return 1
+    fi
     lpid=$(lsof -nP -iTCP:5037 -sTCP:LISTEN -t 2>/dev/null | head -1)
     [ -n "$apid" ] && [ "$lpid" = "$apid" ] && return 1             # 이미 정상 서버 — 원인 다른 데
     now=$(date +%s)
@@ -186,7 +198,14 @@ heal_adb_server() {
     log "5555 열림인데 adb 미접속 — 5037 리스너(${lpid:-없음})≠launchd 서버(${apid:-없음}) → 교체"
     "$ADB" kill-server >/dev/null 2>&1
     launchctl kickstart -k "gui/$(id -u)/$ADB_AGENT" >/dev/null 2>&1
-    sleep 3
+    # 에이전트가 5037 을 잡기 전에 adb 클라이언트를 부르면 그 클라이언트가 막힌
+    # 형태의 서버를 다시 띄운다(리뷰 MEDIUM 레이스) — 잡을 때까지 adb 호출 금지.
+    for i in $(seq 1 15); do
+        sleep 1
+        apid=$(agent_pid); lpid=$(lsof -nP -iTCP:5037 -sTCP:LISTEN -t 2>/dev/null | head -1)
+        [ -n "$apid" ] && [ "$lpid" = "$apid" ] && { log "adb 서버 교체 완료 (launchd PID $apid)"; return 0; }
+    done
+    log "⚠️ adb 서버 교체 후 15s 내 에이전트 리스너 미확인 (listener=${lpid:-없음} agent=${apid:-없음})"
     return 0
 }
 

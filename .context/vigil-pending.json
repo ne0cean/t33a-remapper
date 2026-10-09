@@ -16,5 +16,43 @@
     ],
     "checkpoint": "2026-09-18T13-12-33-subagent.json",
     "source": "SubagentStop"
+  },
+  {
+    "queued_at": "2026-10-09T11:31:20.763Z",
+    "changed_files": [
+      "scripts/install-mac-agents.sh",
+      "scripts/install-mac-agents.sh"
+    ],
+    "checkpoint": "2026-10-09T11-31-20-subagent.json",
+    "source": "SubagentStop"
+  },
+  {
+    "queued_at": "2026-10-09T11:32:55.259Z",
+    "changed_files": [
+      ".context/vigil-pending.json",
+      "scripts/install-mac-agents.sh"
+    ],
+    "checkpoint": "2026-10-09T11-32-55-subagent.json",
+    "source": "SubagentStop"
+  },
+  {
+    "queued_at": "2026-10-09T11:33:27.128Z",
+    "changed_files": [
+      ".context/CURRENT.md",
+      ".context/vigil-pending.json",
+      "scripts/install-mac-agents.sh"
+    ],
+    "checkpoint": "2026-10-09T11-33-27-subagent.json",
+    "source": "SubagentStop"
+  },
+  {
+    "queued_at": "2026-10-09T11:33:44.258Z",
+    "changed_files": [
+      ".context/CURRENT.md",
+      ".context/vigil-pending.json",
+      "scripts/install-mac-agents.sh"
+    ],
+    "checkpoint": "2026-10-09T11-33-44-subagent.json",
+    "source": "SubagentStop"
   }
 ]

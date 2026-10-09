@@ -1,0 +1,44 @@
+{
+  "timestamp": "2026-10-09T11:31:53.252Z",
+  "subagent_input": {
+    "session_id": "67c86197-ee72-41ef-ab9c-f1840e3ea0f5",
+    "transcript_path": "/Users/noir/.claude/projects/-Users-1109386/67c86197-ee72-41ef-ab9c-f1840e3ea0f5.jsonl",
+    "cwd": "/Users/1109386/Projects/t33a-remapper-wt-adbsrv",
+    "scratchpad_dir": "/private/tmp/claude-1144308101/-Users-1109386/67c86197-ee72-41ef-ab9c-f1840e3ea0f5/scratchpad",
+    "prompt_id": "9ffae7a2-6916-4f29-8255-5691a9969279",
+    "permission_mode": "auto",
+    "agent_id": "ab99a88196a8cb875",
+    "agent_type": "",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "SubagentStop",
+    "stop_hook_active": false,
+    "agent_transcript_path": "/Users/noir/.claude/projects/-Users-1109386/67c86197-ee72-41ef-ab9c-f1840e3ea0f5/subagents/agent-ab99a88196a8cb875.jsonl",
+    "last_assistant_message": "Inspecting t33a-auto-tcpip.sh launchd state",
+    "background_tasks": [
+      {
+        "id": "b0vvp4zlt",
+        "type": "shell",
+        "status": "running",
+        "description": "Read t33a reboot recovery lessons",
+        "command": "cd ~/Projects/a-team && for k in lesson_t33a_reboot_no_tcpip lesson_t33a_relay_hb_perm_and_loopback_survival topic_t33a_termux_adb; do f=$(grep -rl \"name: $k\" ~/.claude/projects/*/memory ~/Projects/a-team 2>/dev/null | head -1); echo \"== $k $f\"; [ -n \"$f\" ] && sed -n 1,60p \"$f\"; done 2>&1 | head -150"
+      },
+      {
+        "id": "a5c162eb36cb49fb5",
+        "type": "subagent",
+        "status": "running",
+        "description": "Review adb server heal fix",
+        "agent_type": "review-pr"
+      }
+    ],
+    "session_crons": []
+  },
+  "changed_files": [
+    ".context/vigil-pending.json"
+  ],
+  "changed_count": 1,
+  "status": "clean",
+  "phase": "unknown",
+  "resume_prompt": "/pickup"
+}

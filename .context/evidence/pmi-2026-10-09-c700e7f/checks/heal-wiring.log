@@ -1,0 +1,2 @@
+175:heal_adb_server() {
+219:    if [ -z "$DEV" ] && heal_adb_server; then
