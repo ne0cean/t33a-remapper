@@ -119,7 +119,7 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **standalone + 재부팅 
 
 ## ⏩ Next Tasks
 -4. **heal 경로 라이브 확인 (다음 장애 시)**: 리매퍼가 안 되면 `/tmp/t33a-tcpip.log`에 `adb 서버 교체 완료` 찍혔는지 확인. 없으면 heal 미발화 → 막힘 기전(샌드박스 스폰 vs 로컬 네트워크 권한) 재조사.
--3.5. **10-09 리뷰 LOW 2건 + 정리**: ①install 스크립트가 에이전트 PID를 `launchctl list`로 1회만 읽어 오경보 가능 → `print`+폴링 ②`[ -L ]` 검사가 symlink 대상 stale을 못 잡음 → `readlink` 대조 ③shellcheck 1회 ④루트 CLAUDE.md에 adb-server 에이전트 1줄 ⑤worktree `t33a-remapper-wt-adbsrv`(merged) 제거 — 미추적 checkpoints 파일 처리 후 `git worktree remove`.
+-3.5. ~~10-09 리뷰 LOW 2건 + 정리~~ ✅ 10-09 완료: install PID 매 회 `launchctl print` 재조회 · 심링크를 메인 체크아웃 대상 `-ef` 대조로 교정 · 루트 CLAUDE.md 1줄 · worktree 제거. **shellcheck는 미실행**(세션 샌드박스에서 brew 설치 실패 → `bash -n`만 통과) — 맥에서 `brew install shellcheck` 후 1회.
 -3. **리모컨 실키 인터셉트 e2e** (리모컨 지참 시): 현재 status=waiting(BLE 미연결). 버튼 누르면 5매핑 즉시 적용되는지 1회 확인 — /dev/input 직전까지는 증명됨.
 -2.5. **CRITICAL 변경은 브랜치 랜딩**: main 직행하면 ultra 리뷰 디스패치가 구조적으로 막힘(PR 없음 + 워크플로 부재). 필요 시 `.github/workflows/ultra-review.yml` 도입 검토.
 -2. **🚀 배포+검증 대기 — 2026-08-01 수리 커밋 `daadaed`** (리모컨/폰 있을 때): ①새 `scripts/t33a_boot.sh`를 폰에 배포(규칙 #3: 검증하며) ②`adb reboot` → 잠금해제 → boot.log에서 `WADB Keeper 앱 broadcast` + loopback 연결 확인(Termux uid서 am broadcast 통하는지가 핵심 미검증) ③**adb "이 컴퓨터에서 항상 허용" 1회 체크**(근본원인 #2, 재부팅 인증 리셋 방어). broadcast 메커니즘 자체는 shell uid서 검증됨(result=0, logcat OK).

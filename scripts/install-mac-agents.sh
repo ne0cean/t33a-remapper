@@ -12,7 +12,11 @@ ADB=/opt/homebrew/bin/adb
 exec 3>&1 >"$OUT" 2>&1
 
 # 실행본은 레포 파일 심링크다(배포 드리프트 차단, 09-11). 복사로 덮지 않는다.
-[ -L ~/bin/t33a-auto-tcpip.sh ] || ln -sfn "$REPO/scripts/t33a-auto-tcpip.sh" ~/bin/t33a-auto-tcpip.sh
+# 링크 대상은 메인 체크아웃 — worktree에서 실행해도 지워질 worktree를 가리키지 않게 한다.
+MAIN="$(git -C "$REPO" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')"
+TARGET="${MAIN:-$REPO}/scripts/t33a-auto-tcpip.sh"
+# -ef = 같은 실파일인지(홈 경로 별칭 /Users/<id>↔/Users/noir 문자열 차이 무시).
+{ [ -L ~/bin/t33a-auto-tcpip.sh ] && [ ~/bin/t33a-auto-tcpip.sh -ef "$TARGET" ]; } || ln -sfn "$TARGET" ~/bin/t33a-auto-tcpip.sh
 cp "$REPO/scripts/com.ateam.t33a-adb-server.plist" "$LA/"
 
 launchctl bootout gui/$U/com.ateam.t33a-adb-server 2>/dev/null
@@ -22,10 +26,11 @@ launchctl bootstrap gui/$U "$LA/com.ateam.t33a-adb-server.plist"
 sleep 2
 launchctl kickstart -k gui/$U/com.ateam.t33a-tcpip
 
-APID=$(launchctl list com.ateam.t33a-adb-server | sed -n 's/.*"PID" = \([0-9]*\);/\1/p')
 OK=0
 for i in $(seq 1 12); do
     sleep 5
+    # KeepAlive 재기동으로 PID가 바뀔 수 있어 매 회 다시 읽는다.
+    APID=$(launchctl print "gui/$U/com.ateam.t33a-adb-server" 2>/dev/null | sed -n 's/^[[:space:]]*pid = \([0-9]*\)$/\1/p' | head -1)
     LPID=$(lsof -nP -iTCP:5037 -sTCP:LISTEN -t 2>/dev/null | head -1)
     DEV=$("$ADB" devices | awk '$2=="device"{print $1}' | head -1)
     echo "t+$((i*5))s listener=$LPID agent=$APID dev=$DEV"
