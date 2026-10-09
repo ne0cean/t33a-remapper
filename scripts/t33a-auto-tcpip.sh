@@ -44,6 +44,9 @@ CONFIRM_WAIT=15      # 파괴적 조치 전 2차 확인 간격(초)
 AWAY_BACKOFF=60      # 폰이 LAN 에 없을 때 대기(초)
 LEVER_COOLDOWN=600   # tcpip 레버 재시도 최소 간격(초) — 실패해도 매 틱 relay 를 죽이지 않도록
 LOG_MAX=2000000      # 로그 상한(바이트)
+ADB_AGENT=com.ateam.t33a-adb-server
+HEAL_TS_FILE="$STATEDIR/t33a-tcpip.heal_ts"
+HEAL_COOLDOWN=300    # adb 서버 교체 최소 간격(초)
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOG"; }
 
@@ -164,6 +167,29 @@ keep_levers() {
     log "[$dev] ⚠️ 5555 는 켰으나 relay 미복구 — 다음 사이클 복구 분기에 위임"
 }
 
+# v6 — 막힌 adb 서버 자가치유 (2026-10-09). 폰 5555 는 nc 로 열리는데 adb 만
+# "No route to host" 인 상태로 4일 방치됐다: 셸에서 데몬화돼 뜬 adb 서버가 LAN 에 못 나감.
+# launchd 소유 서버(com.ateam.t33a-adb-server, nodaemon)는 붙는다(실측). 그래서
+# 포트는 열렸는데 못 붙고 + 5037 리스너가 그 에이전트가 아니면 → 갈아끼운다.
+# 0=교체함(재시도 가치 있음), 1=해당 없음.
+heal_adb_server() {
+    local now last lpid apid
+    nc -z -G 2 "$PHONE_IP" 5555 >/dev/null 2>&1 || return 1        # 폰이 정말 없음
+    apid=$(launchctl list "$ADB_AGENT" 2>/dev/null | sed -n 's/.*"PID" = \([0-9]*\);/\1/p')
+    lpid=$(lsof -nP -iTCP:5037 -sTCP:LISTEN -t 2>/dev/null | head -1)
+    [ -n "$apid" ] && [ "$lpid" = "$apid" ] && return 1             # 이미 정상 서버 — 원인 다른 데
+    now=$(date +%s)
+    last=$(cat "$HEAL_TS_FILE" 2>/dev/null)
+    case "$last" in ''|*[!0-9]*) last=0 ;; esac
+    [ $((now - last)) -lt "$HEAL_COOLDOWN" ] && return 1
+    echo "$now" > "$HEAL_TS_FILE"
+    log "5555 열림인데 adb 미접속 — 5037 리스너(${lpid:-없음})≠launchd 서버(${apid:-없음}) → 교체"
+    "$ADB" kill-server >/dev/null 2>&1
+    launchctl kickstart -k "gui/$(id -u)/$ADB_AGENT" >/dev/null 2>&1
+    sleep 3
+    return 0
+}
+
 field() { echo "$1" | tr ' ' '\n' | sed -n "s/^$2=//p" | head -1; }
 
 # 0=건강, 1=죽음/이상, 2=판정불가(통신 실패)
@@ -179,7 +205,7 @@ assess() {
     return 0
 }
 
-log "=== t33a-auto-tcpip v5 started (PID $$, 이월 FAILS=$FAILS) ==="
+log "=== t33a-auto-tcpip v6 started (PID $$, 이월 FAILS=$FAILS) ==="
 STATE=unknown   # alive | dead | away
 
 while true; do
@@ -190,6 +216,9 @@ while true; do
     rotate_log
 
     DEV=$(ensure_device)
+    if [ -z "$DEV" ] && heal_adb_server; then
+        DEV=$(ensure_device)
+    fi
     if [ -z "$DEV" ]; then
         [ "$STATE" != "away" ] && log "폰 접속 불가 — 같은 LAN 에 없거나 무선디버깅 OFF (대기)"
         STATE=away

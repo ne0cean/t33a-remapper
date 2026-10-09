@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  adb 서버를 launchd 가 직접 소유한다 (2026-10-09).
+  셸에서 자동 기동된(데몬화된) adb 서버는 폰 LAN 주소에 "No route to host" 로 4일간 막혔다 —
+  같은 순간 nc 는 5555 에 붙었다. launchd 가 띄운 `adb nodaemon server` 는 즉시 붙었다(실측).
+  상시 떠 있으면 다른 adb 클라이언트(t33·세션)가 막힌 서버를 새로 띄울 틈이 없다.
+  설치: ~/Library/LaunchAgents/ 로 복사 후 launchctl bootstrap gui/$(id -u) <plist>
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ateam.t33a-adb-server</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/adb</string>
+        <string>nodaemon</string>
+        <string>server</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/t33a-adb-server.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/t33a-adb-server.log</string>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+</dict>
+</plist>
