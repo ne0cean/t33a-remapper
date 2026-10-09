@@ -12,6 +12,7 @@
 - 즉시 복구: 폰 5555 열림(nc OK)인데 adb만 `No route to host`. `adb nodaemon server`로 갈아끼우자 맥 데몬이 8초 만에 relay 재기동·복구(20:16:37).
 - 원인 규명: 맥 데몬은 10-05부터 가동 중이었으나 막힌 adb 서버를 경유해 4일간 'away'. 폰 가동시간 15일 = 실제 재부팅 아님, relay만 사망.
 - 수리: launchd `com.ateam.t33a-adb-server`(nodaemon 상시) + 데몬 v6 `heal_adb_server` + `scripts/install-mac-agents.sh`.
+- 이관(`7de56bd`): 설치 완료 반영, heal 라이브 확인·리뷰 LOW 2건·worktree 정리를 CURRENT Next -4·-3.5로. 리뷰=LOW(문서 전용, 비-.context 파일 0), PMI=N/A(신규 자원 없음).
 - 리뷰(review-pr MEDIUM): HIGH2 — 에이전트 미설치 시 공용 adb 서버 300s마다 kill(fail-open) → 미설치 가드(실측 rc=1·리스너 불변). 레이스 → 에이전트 리스너 확인 전 adb 호출 금지 폴링. PMI: install이 심링크 실행본을 cp로 덮던 결함 수리.
 - 레슨: 메모리 topic_t33a_termux_adb에 10-09 항목.
 
