@@ -1,0 +1,7 @@
+/Users/1109386/Projects/t33a-remapper/CLAUDE.md:21:- 맥 adb 서버는 launchd `com.ateam.t33a-adb-server`(nodaemon 상시)가 소유 — 셸이 띄운 서버가 LAN에
+/Users/1109386/Projects/t33a-remapper/CLAUDE.md:22:  "No route to host"로 4일 막힌 인시던트(2026-10-09) 대책. 설치·재설치: `scripts/install-mac-agents.sh`.
+.context/CURRENT.md:6:- 수리: ①`scripts/com.ateam.t33a-adb-server.plist` — launchd가 adb 서버 상시 소유(KeepAlive) ②데몬 v6 `heal_adb_server` — 5555 열림+미접속+5037 리스너≠에이전트면 kill-server→kickstart(쿨다운 300s) ③`scripts/install-mac-agents.sh` 설치·검증 1커맨드.
+.context/CURRENT.md:8:- 설치: 의장 `install-mac-agents.sh` 실행 → ✅(launchd 서버가 192.168.0.18:5555 연결). 잔여는 Next Tasks -4·-3.5로 이관.
+scripts/t33a-auto-tcpip.sh:47:ADB_AGENT=com.ateam.t33a-adb-server
+scripts/t33a-auto-tcpip.sh:172:# launchd 소유 서버(com.ateam.t33a-adb-server, nodaemon)는 붙는다(실측). 그래서
+scripts/t33a-auto-tcpip.sh:187:        [ "${HEAL_WARNED:-0}" = 1 ] || log "5555 열림인데 adb 미접속 — $ADB_AGENT 미설치라 서버 교체 보류 (scripts/install-mac-agents.sh)"
