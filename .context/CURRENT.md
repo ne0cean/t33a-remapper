@@ -1,9 +1,10 @@
 # Current Status
 
-## 🟡 2026-10-09 — 맥 데몬 4일 방치 원인 = 막힌 adb 서버 → launchd 소유 서버 + 자가치유 (커밋 `50fc7a7`·`c700e7f`, 설치 대기)
+## 🟡 2026-10-09 — 맥 데몬 4일 방치 원인 = 막힌 adb 서버 → launchd 소유 서버 + 자가치유 (커밋 `50fc7a7`·`c700e7f`·`5157a0d`, 설치 대기)
 - 증상: 리매퍼 다운(relay hb 199,345s). 맥 데몬(`com.ateam.t33a-tcpip`)은 10-05부터 가동 중이었으나 `폰 접속 불가`로 4일 'away'. 폰은 같은 LAN·5555 열림(nc OK)인데 adb만 `No route to host`.
 - 실측: 수동 `adb nodaemon server`를 띄운 즉시 데몬이 붙어 8초 만에 자동 복구(20:16:28→37). launchd가 띄운 nodaemon 서버도 붙음. 기전(샌드박스 셸에서 스폰된 서버 vs 로컬 네트워크 권한)은 **미확정**.
 - 수리: ①`scripts/com.ateam.t33a-adb-server.plist` — launchd가 adb 서버 상시 소유(KeepAlive) ②데몬 v6 `heal_adb_server` — 5555 열림+미접속+5037 리스너≠에이전트면 kill-server→kickstart(쿨다운 300s) ③`scripts/install-mac-agents.sh` 설치·검증 1커맨드.
+- 리뷰 HIGH 반영: 에이전트 미설치면 heal 보류(공용 서버 kill 방지), 교체 후 에이전트 리스너 확인 전 adb 호출 금지.
 - **잔여**: 설치 미실행(세션 가드가 launchd 쓰기 차단 → 의장 `! bash ~/Projects/t33a-remapper/scripts/install-mac-agents.sh`). heal 경로 라이브 발화 미검증.
 
 ## ✅ 2026-09-25 — 폰 상태 확인 위젯 + 맥 레버 능동 유지 (커밋 `c1997e7`, main 머지·push 완료)

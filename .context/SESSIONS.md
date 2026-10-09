@@ -4,6 +4,20 @@
 버그 원인 추적이나 진행 상황 히스토리 파악에 유용합니다. (`.agent/workflows/session-end.md` 워크플로우를 통해 강제 기입됨)
 
 ---
+## [2026-10-09] 맥 데몬 4일 방치 = 막힌 adb 서버 → launchd 소유 서버 + 자가치유 (커밋 50fc7a7·c700e7f·5157a0d)
+
+**요청**: "폰 재부팅되었으니 복구해" → "레슨 저장해서 터미널/세션 안 열어도 같은 네트워크면 바로 되살리도록" → /review → /pmi → /end
+
+**완료**:
+- 즉시 복구: 폰 5555 열림(nc OK)인데 adb만 `No route to host`. `adb nodaemon server`로 갈아끼우자 맥 데몬이 8초 만에 relay 재기동·복구(20:16:37).
+- 원인 규명: 맥 데몬은 10-05부터 가동 중이었으나 막힌 adb 서버를 경유해 4일간 'away'. 폰 가동시간 15일 = 실제 재부팅 아님, relay만 사망.
+- 수리: launchd `com.ateam.t33a-adb-server`(nodaemon 상시) + 데몬 v6 `heal_adb_server` + `scripts/install-mac-agents.sh`.
+- 리뷰(review-pr MEDIUM): HIGH2 — 에이전트 미설치 시 공용 adb 서버 300s마다 kill(fail-open) → 미설치 가드(실측 rc=1·리스너 불변). 레이스 → 에이전트 리스너 확인 전 adb 호출 금지 폴링. PMI: install이 심링크 실행본을 cp로 덮던 결함 수리.
+- 레슨: 메모리 topic_t33a_termux_adb에 10-09 항목.
+
+**미완**: 설치 미실행(세션 가드가 launchd 쓰기 차단 → 의장 `! bash ~/Projects/t33a-remapper/scripts/install-mac-agents.sh`). heal 데몬 문맥 E2E·막힘 기전 미확정. 루트 CLAUDE.md(미추적) 1줄.
+
+---
 ## [2026-09-25] 폰 상태 확인 위젯 신설 + 맥 레버 능동 유지 (커밋 c1997e7)
 
 **요청**: "재부팅돼도 같은 네트워크면 데몬이 되살아나는 메커니즘 설명 + 폰에서 확인할 방법" → 이어서 "맥이 무선 디버깅 항상 자동으로 켜게" → "15초 핑 부하는?" → "위젯 말고 더 심플한 확인법은?"
