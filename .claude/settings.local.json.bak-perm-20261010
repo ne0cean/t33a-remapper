@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git rm *)",
+      "Bash(adb connect:*)",
+      "Bash(find ~/Projects/a-team ~/tools/A-Team -name termux-ctrl* -o -name termux_ctrl*)",
+      "Bash(find ~/Projects/a-team ~/tools/A-Team -path */termux* -type f)",
+      "Bash(adb -s R3CR90BGQMA shell ' *)",
+      "Bash(adb -s R3CXA0DKVVV shell ' *)",
+      "Bash(adb -s R3CXA0DKVVV shell \"ps -ef 2>/dev/null | grep -E 'relay|t33a' | grep -v grep\")",
+      "Bash(adb -s R3CXA0DKVVV shell \"kill -0 11966 2>/dev/null && echo 'alive' || echo 'dead'\")",
+      "Bash(adb -s R3CXA0DKVVV shell \"cat /sdcard/Download/t33a_boot.log\")",
+      "Bash(adb -s R3CXA0DKVVV shell \"cat /sdcard/Download/t33a_boot.sh\")",
+      "Bash(adb -s R3CXA0DKVVV shell 'tail -f /sdcard/Download/t33a_boot.log & *)",
+      "Bash(wait)",
+      "Bash(./t33a.sh build *)",
+      "Bash(adb -s R3CXA0DKVVV shell \"tail -8 /sdcard/Download/t33a.log\")",
+      "Bash(adb -s R3CXA0DKVVV shell \"cat /data/local/tmp/t33a.conf 2>/dev/null\")",
+      "Bash(adb -s R3CXA0DKVVV shell \"cat /sdcard/Download/t33a_start.sh\")",
+      "Bash(adb -s R3CXA0DKVVV shell \"tail -3 /sdcard/Download/t33a_boot.log\")",
+      "Bash(adb -s R3CXA0DKVVV shell \"tail -10 /sdcard/Download/t33a_boot.log && echo '---' && sleep 70 && tail -5 /sdcard/Download/t33a_boot.log\")",
+      "Bash(adb -s R3CXA0DKVVV push scripts/t33a_relay.sh /sdcard/Download/t33a_relay.sh)",
+      "Bash(adb -s R3CXA0DKVVV push build/t33a_remap /sdcard/Download/t33a_remap)",
+      "Bash(adb -s R3CXA0DKVVV shell \"tail -20 /sdcard/Download/t33a.log\")",
+      "Bash(adb -s R3CXA0DKVVV shell \"tail -3 /sdcard/Download/t33a.log && cat /data/local/tmp/t33a.heartbeat\")",
+      "Bash(adb -s R3CXA0DKVVV shell \"tail -5 /sdcard/Download/t33a_boot.log\")",
+      "Bash(adb -s R3CXA0DKVVV shell \"wc -l /sdcard/Download/t33a_boot.log && date\")",
+      "Bash(bash -n /Users/noir/Projects/t33a-remapper/__TRACKED_VAR__)",
+      "Bash(gh api *)",
+      "Bash(adb -s R3CXA0DKVVV push /Users/noir/Projects/t33a-remapper/scripts/t33a_setup_phone.sh /sdcard/Download/t33a_setup_phone.sh)",
+      "Bash(bash -n /Users/noir/Projects/t33a-remapper/scripts/t33a_setup_phone.sh)",
+      "Bash(bash -n /Users/noir/Projects/t33a-remapper/scripts/t33a_auto_pull.sh)",
+      "Bash(bash -n /Users/noir/Projects/t33a-remapper/t33a.sh)",
+      "Bash(bash -n /Users/noir/Projects/t33a-remapper/scripts/t33a_relay.sh)",
+      "Bash(bash -n /Users/noir/Projects/t33a-remapper/scripts/t33a_boot.sh)",
+      "Bash(adb -s R3CXA0DKVVV shell \"ls /data/data/com.termux/files/home/.shortcuts/\")"
+    ],
+    "defaultMode": "bypassPermissions"
+  }
+}
