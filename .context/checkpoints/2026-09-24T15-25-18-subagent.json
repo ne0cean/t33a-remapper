@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-09-24T15:25:18.852Z",
+  "subagent_input": {
+    "session_id": "048bdf3c-45b5-484a-b0b7-e3d3435fb572",
+    "transcript_path": "/Users/noir/.claude/projects/-Users-noir-Projects-t33a-remapper--claude-worktrees-t33a-status-widget/048bdf3c-45b5-484a-b0b7-e3d3435fb572.jsonl",
+    "cwd": "/Users/noir/Projects/t33a-remapper/.claude/worktrees/t33a-status-widget",
+    "scratchpad_dir": "/private/tmp/claude-501/-Users-noir/048bdf3c-45b5-484a-b0b7-e3d3435fb572/scratchpad",
+    "prompt_id": "56431a46-5ce9-4c2a-adad-8dccea99ae9b",
+    "permission_mode": "bypassPermissions",
+    "agent_id": "ae06820f3a1b31d7e",
+    "agent_type": "",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "SubagentStop",
+    "stop_hook_active": false,
+    "agent_transcript_path": "/Users/noir/.claude/projects/-Users-noir-Projects-t33a-remapper--claude-worktrees-t33a-status-widget/048bdf3c-45b5-484a-b0b7-e3d3435fb572/subagents/agent-ae06820f3a1b31d7e.jsonl",
+    "last_assistant_message": "Reviewing watchdog loop notification wiring in t33a_boot.sh",
+    "background_tasks": [
+      {
+        "id": "af405c834e9385e62",
+        "type": "subagent",
+        "status": "running",
+        "description": "Review t33a branch diff",
+        "agent_type": "review-pr"
+      }
+    ],
+    "session_crons": []
+  },
+  "changed_files": [],
+  "changed_count": 0,
+  "status": "clean",
+  "phase": "unknown",
+  "resume_prompt": "/pickup"
+}
