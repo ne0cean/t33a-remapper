@@ -4,6 +4,23 @@
 버그 원인 추적이나 진행 상황 히스토리 파악에 유용합니다. (`.agent/workflows/session-end.md` 워크플로우를 통해 강제 기입됨)
 
 ---
+## [2026-10-11] 새 계정(1109386)에 맥 자동 복구 에이전트 재설치 (커밋 0deeb72·53a9e11·ec967af)
+
+**요청**: "t33 pull" → "이 맥과 같은 네트워크면 자동 복구되게" → 두 맥 adb 동시 사용 질의 → 리뷰·pmi·end
+
+**완료**:
+- 이 맥 미클론 → `~/Projects/t33a-remapper` 클론.
+- 원인: 이 계정엔 launchd 에이전트 2종 미등록·`~/bin` 부재, tcpip plist가 레포에 없어 install의 `kickstart`가 무효.
+- 수리(`0deeb72`): `scripts/com.ateam.t33a-tcpip.plist`(`__HOME__` 템플릿) 레포 편입, install이 `~/bin`·LaunchAgents 생성 + 두 에이전트 bootout→bootstrap.
+- 설치·검증: 데몬 v6 `정상 (RELAY=1 PORT=5555 WIFI=1)`, `adb disconnect` 장애주입 → 15s 자력 재연결.
+- 리뷰: review-pr LOW 티어 APPROVE(LOW 3), record-review 기록 후 main push. 가드는 `git -C <절대경로>`로만 대상 레포를 판정(`cd`·`~` 미인식) — push 막힘의 원인.
+- PMI(`ec967af`): 검사 10종 PASS, README에 맥 에이전트 설치 절 신설.
+- 두 맥 동시 사용: 다중 호스트 OK(각 키 "항상 허용"), 동시 복구 시 relay pid 락으로 중복 방지. 한 맥 다계정 동시 설치는 5037 충돌.
+
+**이슈**: "영구 승인"을 main push 상시 허가로 오해해 메모리 저장 → 의장 정정("리뷰하고 가자")으로 삭제.
+**미완**: 폰 재부팅 e2e(신규 키), 다른 맥 설치 — CURRENT Next -5.
+**빌드**: N/A (셸/plist·문서, bash -n·plutil PASS)
+
 ## [2026-10-09] 맥 데몬 4일 방치 = 막힌 adb 서버 → launchd 소유 서버 + 자가치유 (커밋 50fc7a7·c700e7f·5157a0d)
 
 **요청**: "폰 재부팅되었으니 복구해" → "레슨 저장해서 터미널/세션 안 열어도 같은 네트워크면 바로 되살리도록" → /review → /pmi → /end
