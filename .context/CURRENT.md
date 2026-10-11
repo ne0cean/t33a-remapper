@@ -123,7 +123,7 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **standalone + 재부팅 
 - 원인: relay 25초 주기 사망 시 daemon도 같이 죽었던 구조 → 픽스로 해소
 
 ## ⏩ Next Tasks
--5. **1109386 계정 재부팅 e2e + 다른 맥 설치** (10-11 PMI UNVERIFIED): ①폰 재부팅 → 잠금해제 → `/tmp/t33a-tcpip.log`에 이 계정 키로 자동 복구 찍히는지(새 adb 키 — 폰 "항상 허용" 체크 확인) ②다른 맥에서 `git pull --ff-only && bash scripts/install-mac-agents.sh`. 한 맥에서 noir·1109386 두 계정 동시 설치 금지(5037 충돌). (선택) 리뷰 LOW 3: sed 특수문자 HOME·주석 순서·tcpip bootstrap rc.
+-5. **1109386 계정 재부팅 e2e + 다른 맥 설치** (10-11 PMI UNVERIFIED): ①폰 재부팅 → 잠금해제 → `/tmp/t33a-tcpip.log`에 이 계정 키로 자동 복구 찍히는지(새 adb 키 — 폰 "항상 허용" 체크 확인) ②다른 맥 설치 — **절차 정본 `.context/RESUME.md`** (그 맥에서 이 레포 열고 `/pickup`). 한 맥에서 noir·1109386 두 계정 동시 설치 금지(5037 충돌). (선택) 리뷰 LOW 3: sed 특수문자 HOME·주석 순서·tcpip bootstrap rc.
 -4. **heal 경로 라이브 확인 (다음 장애 시)**: 리매퍼가 안 되면 `/tmp/t33a-tcpip.log`에 `adb 서버 교체 완료` 찍혔는지 확인. 없으면 heal 미발화 → 막힘 기전(샌드박스 스폰 vs 로컬 네트워크 권한) 재조사.
 -3.5. ~~10-09 리뷰 LOW 2건 + 정리~~ ✅ 10-09 완료: install PID 매 회 `launchctl print` 재조회 · 심링크를 메인 체크아웃 대상 `-ef` 대조로 교정 · 루트 CLAUDE.md 1줄 · worktree 제거. shellcheck 0.11.0(공식 릴리스 바이너리, brew는 세션 샌드박스 안에서 bottle 추출이 TERM으로 죽음) — 버그 0: SC2034 미사용 루프 변수 `i` ×2, SC2086 숫자 uid `$U` 미인용, SC2016 의도된 작은따옴표. 수정 불필요.
 -3. **리모컨 실키 인터셉트 e2e** (리모컨 지참 시): 현재 status=waiting(BLE 미연결). 버튼 누르면 5매핑 즉시 적용되는지 1회 확인 — /dev/input 직전까지는 증명됨.
