@@ -16,15 +16,19 @@ exec 3>&1 >"$OUT" 2>&1
 MAIN="$(git -C "$REPO" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')"
 TARGET="${MAIN:-$REPO}/scripts/t33a-auto-tcpip.sh"
 # -ef = 같은 실파일인지(홈 경로 별칭 /Users/<id>↔/Users/noir 문자열 차이 무시).
+mkdir -p ~/bin "$LA"   # 새 맥/계정엔 둘 다 없다(10-11 1109386 계정 실측)
 { [ -L ~/bin/t33a-auto-tcpip.sh ] && [ ~/bin/t33a-auto-tcpip.sh -ef "$TARGET" ]; } || ln -sfn "$TARGET" ~/bin/t33a-auto-tcpip.sh
 cp "$REPO/scripts/com.ateam.t33a-adb-server.plist" "$LA/"
+# tcpip plist 는 레포 템플릿에서 렌더한다 — 예전엔 맥에만 있어 kickstart 가 새 계정에서 허공을 쳤다.
+sed "s|__HOME__|$HOME|g" "$REPO/scripts/com.ateam.t33a-tcpip.plist" > "$LA/com.ateam.t33a-tcpip.plist"
 
+launchctl bootout gui/$U/com.ateam.t33a-tcpip 2>/dev/null
 launchctl bootout gui/$U/com.ateam.t33a-adb-server 2>/dev/null
 "$ADB" kill-server 2>/dev/null
 sleep 1
 launchctl bootstrap gui/$U "$LA/com.ateam.t33a-adb-server.plist"
 sleep 2
-launchctl kickstart -k gui/$U/com.ateam.t33a-tcpip
+launchctl bootstrap gui/$U "$LA/com.ateam.t33a-tcpip.plist"
 
 OK=0
 for i in $(seq 1 12); do
@@ -40,5 +44,5 @@ tail -5 /tmp/t33a-tcpip.log
 if [ "$OK" = 1 ]; then
     echo "✅ 설치 완료 — launchd adb 서버($APID)가 폰($DEV)에 연결됨" >&3
 else
-    echo "⚠️ 설치는 됐으나 폰 연결 미확인 — $OUT 확인" >&3
+    echo "⚠️ 설치는 됐으나 폰 연결 미확인 — $OUT 확인 (No route to host 면 시스템 설정 → 개인정보 보호 → 로컬 네트워크에서 adb/bash 허용)" >&3
 fi
