@@ -1,0 +1,6 @@
+2026-10-11 21:35:13 === t33a-auto-tcpip v6 started (PID 72193, 이월 FAILS=0) ===
+2026-10-11 21:35:28 폰 접속 불가 — 같은 LAN 에 없거나 무선디버깅 OFF (대기)
+2026-10-11 21:36:43 [192.168.0.18:5555] 정상 (AGE=0 WHB=29 REMAP=2 RELAY=1 PORT=5555 WIFI=1 ST=waiting OK=1)
+List of devices attached
+192.168.0.18:5555	device
+

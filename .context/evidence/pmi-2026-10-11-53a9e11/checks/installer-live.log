@@ -1,0 +1,14 @@
+t+5s listener=72179 agent=72179 dev=
+t+10s listener=72179 agent=72179 dev=
+t+15s listener=72179 agent=72179 dev=
+t+20s listener=72179 agent=72179 dev=
+t+25s listener=72179 agent=72179 dev=
+t+30s listener=72179 agent=72179 dev=
+t+35s listener=72179 agent=72179 dev=
+t+40s listener=72179 agent=72179 dev=
+t+45s listener=72179 agent=72179 dev=
+t+50s listener=72179 agent=72179 dev=
+t+55s listener=72179 agent=72179 dev=
+t+60s listener=72179 agent=72179 dev=
+2026-10-11 21:35:13 === t33a-auto-tcpip v6 started (PID 72193, 이월 FAILS=0) ===
+2026-10-11 21:35:28 폰 접속 불가 — 같은 LAN 에 없거나 무선디버깅 OFF (대기)

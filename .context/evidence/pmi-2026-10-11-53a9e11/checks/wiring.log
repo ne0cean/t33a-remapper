@@ -1,0 +1,17 @@
+/Users/1109386/Projects/t33a-remapper/.context/pmi-2026-10-09.md:10:- 신규 2(plist, install-mac-agents.sh), 수정 1(t33a-auto-tcpip.sh v6)
+/Users/1109386/Projects/t33a-remapper/.context/SESSIONS.md:14:- 수리: launchd `com.ateam.t33a-adb-server`(nodaemon 상시) + 데몬 v6 `heal_adb_server` + `scripts/install-mac-agents.sh`.
+/Users/1109386/Projects/t33a-remapper/.context/SESSIONS.md:20:**미완**: 설치 미실행(세션 가드가 launchd 쓰기 차단 → 의장 `! bash ~/Projects/t33a-remapper/scripts/install-mac-agents.sh`). heal 데몬 문맥 E2E·막힘 기전 미확정. 루트 CLAUDE.md(미추적) 1줄.
+/Users/1109386/Projects/t33a-remapper/.context/CURRENT.md:5:- 수리: `scripts/com.ateam.t33a-tcpip.plist`(`__HOME__` 템플릿) 신설, install 이 `~/bin`·LaunchAgents 생성 + 두 에이전트 bootout→bootstrap.
+/Users/1109386/Projects/t33a-remapper/.context/CURRENT.md:11:- 수리: ①`scripts/com.ateam.t33a-adb-server.plist` — launchd가 adb 서버 상시 소유(KeepAlive) ②데몬 v6 `heal_adb_server` — 5555 열림+미접속+5037 리스너≠에이전트면 kill-server→kickstart(쿨다운 300s) ③`scripts/install-mac-agents.sh` 설치·검증 1커맨드.
+/Users/1109386/Projects/t33a-remapper/.context/CURRENT.md:13:- 설치: 의장 `install-mac-agents.sh` 실행 → ✅(launchd 서버가 192.168.0.18:5555 연결). 잔여는 Next Tasks -4·-3.5로 이관.
+/Users/1109386/Projects/t33a-remapper/.context/reviews/2026-10-11-mac-agent-bootstrap.md:9:- `bash -n scripts/install-mac-agents.sh` -> rc=0 (BASHOK)
+/Users/1109386/Projects/t33a-remapper/.context/reviews/2026-10-11-mac-agent-bootstrap.md:10:- `plutil -lint scripts/com.ateam.t33a-tcpip.plist` -> OK
+/Users/1109386/Projects/t33a-remapper/.context/reviews/2026-10-11-mac-agent-bootstrap.md:19:   install-mac-agents.sh:25-26 에서 tcpip 을 먼저 bootout, 그다음 adb-server bootout, `kill-server`, `bootstrap adb-server`, `sleep 2`, `bootstrap tcpip`.
+/Users/1109386/Projects/t33a-remapper/.context/reviews/2026-10-11-mac-agent-bootstrap.md:30:[LOW] scripts/install-mac-agents.sh:23 — `sed "s|__HOME__|$HOME|g"` 는 $HOME 에 `|` 나 `&` 가 있으면 깨진다.
+/Users/1109386/Projects/t33a-remapper/.context/reviews/2026-10-11-mac-agent-bootstrap.md:36:[LOW] scripts/install-mac-agents.sh:19-20 — `mkdir -p` 가 `# 실행본은 ... -ef` 설명 주석과 그것이 설명하는 심링크 줄 사이에 끼어, 주석 대상이 어긋나 읽힌다. 기능 영향 없음, 주석/줄 순서만 정리하면 된다.
+/Users/1109386/Projects/t33a-remapper/.context/reviews/2026-10-11-mac-agent-bootstrap.md:38:[LOW] scripts/install-mac-agents.sh:27-31 — 두 번째 bootstrap 호출(tcpip)은 실패를 검사하지 않는다(`set -u` 만, `-e` 없음).
+/Users/1109386/Projects/t33a-remapper/.context/reviews/2026-10-11-mac-agent-bootstrap.md:44:[install-mac-agents.sh]
+/Users/1109386/Projects/t33a-remapper/scripts/com.ateam.t33a-tcpip.plist:7:  __HOME__ 은 install-mac-agents.sh 가 설치 시 $HOME 으로 치환한다(plist 는 ~ 를 해석하지 않음).
+/Users/1109386/Projects/t33a-remapper/scripts/install-mac-agents.sh:23:sed "s|__HOME__|$HOME|g" "$REPO/scripts/com.ateam.t33a-tcpip.plist" > "$LA/com.ateam.t33a-tcpip.plist"
+/Users/1109386/Projects/t33a-remapper/scripts/install-mac-agents.sh:31:launchctl bootstrap gui/$U "$LA/com.ateam.t33a-tcpip.plist"
+/Users/1109386/Projects/t33a-remapper/scripts/t33a-auto-tcpip.sh:187:        [ "${HEAL_WARNED:-0}" = 1 ] || log "5555 열림인데 adb 미접속 — $ADB_AGENT 미설치라 서버 교체 보류 (scripts/install-mac-agents.sh)"

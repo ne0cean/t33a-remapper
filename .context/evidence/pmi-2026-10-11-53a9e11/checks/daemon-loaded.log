@@ -1,0 +1,40 @@
+gui/1144308101/com.ateam.t33a-tcpip = {
+	active count = 1
+	path = /Users/1109386/Library/LaunchAgents/com.ateam.t33a-tcpip.plist
+	type = LaunchAgent
+	state = running
+
+	program = /bin/bash
+	arguments = {
+		/bin/bash
+		/Users/1109386/bin/t33a-auto-tcpip.sh
+	}
+
+	stdout path = /tmp/t33a-tcpip.log
+	stderr path = /tmp/t33a-tcpip.log
+	inherited environment = {
+		SSH_AUTH_SOCK => /var/run/com.apple.launchd.Hekrj0kXgv/Listeners
+	}
+
+	default environment = {
+		PATH => /usr/bin:/bin:/usr/sbin:/sbin
+gui/1144308101/com.ateam.t33a-adb-server = {
+	active count = 1
+	path = /Users/1109386/Library/LaunchAgents/com.ateam.t33a-adb-server.plist
+	type = LaunchAgent
+	state = running
+
+	program = /opt/homebrew/bin/adb
+	arguments = {
+		/opt/homebrew/bin/adb
+		nodaemon
+		server
+	}
+
+	stdout path = /tmp/t33a-adb-server.log
+	stderr path = /tmp/t33a-adb-server.log
+	inherited environment = {
+		SSH_AUTH_SOCK => /var/run/com.apple.launchd.Hekrj0kXgv/Listeners
+	}
+
+	default environment = {
