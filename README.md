@@ -75,14 +75,14 @@ adb shell chmod +x /data/local/tmp/t33a_remap /data/local/tmp/*.sh
 ```
 
 ### Mac 자동 복구 에이전트 (맥·계정마다 1회)
-폰이 이 맥과 같은 LAN 에 들어오면 15s 내 붙어서 relay/remap 을 되살리는 launchd 에이전트 2종.
+폰이 이 맥과 같은 LAN 에 들어오면 약 1분 내(감시 15s + 부재 대기 60s, 실측 75s · 연속 실패 누적 시 최대 5분) 붙어서 relay/remap 을 되살리는 launchd 에이전트 2종.
 ```bash
 bash scripts/install-mac-agents.sh   # com.ateam.t33a-adb-server + com.ateam.t33a-tcpip 설치·재기동·검증
 tail -f /tmp/t33a-tcpip.log          # 판정 로그
 ```
 - 새 맥/계정의 adb 키는 폰에서 **"이 컴퓨터에서 항상 허용"** 체크 필수(재부팅 후 재연결).
 - 맥 여러 대는 OK, **한 맥의 여러 계정 동시 설치는 금지**(5037 포트 충돌).
-- 한계: 맥 잠자기·로그아웃·폰 외부망이면 복구 불가.
+- 한계: 맥 잠자기·로그아웃·폰 외부망이면 복구 불가. Apple Silicon 전제(`/opt/homebrew/bin/adb` 하드코딩), 폰 IP 기본 192.168.0.18(다르면 `T33A_IP`; 시리얼 폴백 있음).
 
 ## 최초 설치 (1회)
 

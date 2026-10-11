@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   폰 감시·자동 복구 데몬 (scripts/t33a-auto-tcpip.sh). 폰이 맥과 같은 LAN 에 들어오면
-  15s 내 붙어서 relay/remap 을 되살린다. 로그인 시 자동 기동(RunAtLoad), 죽으면 재기동(KeepAlive).
+  약 1분 내(감시 15s + 부재 대기 60s) 붙어서 relay/remap 을 되살린다. 로그인 시 자동 기동(RunAtLoad), 죽으면 재기동(KeepAlive).
   2026-10-11 레포 편입 — 그전엔 맥에만 있던 사본이라 새 계정/맥에서 재현 불가였다.
   __HOME__ 은 install-mac-agents.sh 가 설치 시 $HOME 으로 치환한다(plist 는 ~ 를 해석하지 않음).
 -->
