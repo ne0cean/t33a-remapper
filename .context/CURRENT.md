@@ -1,5 +1,10 @@
 # Current Status
 
+## ✅ 2026-10-11 — 새 계정(1109386)에 맥 복구 데몬 재설치 + tcpip plist 레포 편입 (커밋 `0deeb72`)
+- 증상: 이 계정엔 `com.ateam.t33a-tcpip`·`t33a-adb-server` 둘 다 미등록, `~/bin` 부재 → 같은 LAN 에 있어도 복구 0. tcpip plist 가 레포에 없어 install 의 `kickstart` 가 허공.
+- 수리: `scripts/com.ateam.t33a-tcpip.plist`(`__HOME__` 템플릿) 신설, install 이 `~/bin`·LaunchAgents 생성 + 두 에이전트 bootout→bootstrap.
+- 검증: 21:36:43 데몬 `정상 (RELAY=1 PORT=5555 WIFI=1 ST=waiting)`. `adb disconnect` 장애주입 → 15s 만에 데몬 자력 재연결(21:37:00→15).
+
 ## 🟡 2026-10-09 — 맥 데몬 4일 방치 원인 = 막힌 adb 서버 → launchd 소유 서버 + 자가치유 (커밋 `50fc7a7`·`c700e7f`·`5157a0d`, 설치 완료 — launchd adb 서버 PID 78009·데몬 v6 정상)
 - 증상: 리매퍼 다운(relay hb 199,345s). 맥 데몬(`com.ateam.t33a-tcpip`)은 10-05부터 가동 중이었으나 `폰 접속 불가`로 4일 'away'. 폰은 같은 LAN·5555 열림(nc OK)인데 adb만 `No route to host`.
 - 실측: 수동 `adb nodaemon server`를 띄운 즉시 데몬이 붙어 8초 만에 자동 복구(20:16:28→37). launchd가 띄운 nodaemon 서버도 붙음. 기전(샌드박스 셸에서 스폰된 서버 vs 로컬 네트워크 권한)은 **미확정**.
