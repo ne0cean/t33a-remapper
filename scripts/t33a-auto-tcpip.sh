@@ -102,7 +102,14 @@ ensure_device() {
     done
     for cand in $cands; do
         if "$ADB" connect "$cand:5555" 2>&1 | grep -qiE "^connected|already connected"; then
-            [ "$cand" != "$PHONE_IP" ] && log "후보 경로로 접속: $cand:5555 (LAN $PHONE_IP 대신)"
+            if [ "$cand" != "$PHONE_IP" ]; then
+                # 낯선 주소(게이트웨이·Tailscale)는 시리얼로 신원 확인 — 남의 기기에 쓰기 금지(리뷰 H4, 2026-10-13)
+                if [ "$("$ADB" -s "$cand:5555" shell getprop ro.serialno 2>/dev/null | tr -d '\r\n ')" != "$PHONE_SERIAL" ]; then
+                    log "후보 $cand:5555 는 시리얼 불일치 — 연결 해제"
+                    "$ADB" disconnect "$cand:5555" >/dev/null 2>&1; continue
+                fi
+                log "후보 경로로 접속: $cand:5555 (LAN $PHONE_IP 대신, 시리얼 확인)"
+            fi
             echo "$cand:5555"; return 0
         fi
     done
