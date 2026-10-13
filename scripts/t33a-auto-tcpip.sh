@@ -35,6 +35,8 @@ LOCK_PIDF="$STATEDIR/t33a-tcpip.pid"
 LEVER_TS_FILE="$STATEDIR/t33a-tcpip.lever_ts"
 ADB=/opt/homebrew/bin/adb
 PHONE_IP="${T33A_IP:-192.168.0.18}"
+PHONE_TS_IP="${T33A_TS_IP:-100.107.190.45}"   # 폰 Tailscale IP — 집·회사·테더링·LTE 어디서든 닿는 전역 경로 (2026-10-13)
+HOTSPOT_SSID="${T33A_HOTSPOT_SSID:-The blade}" # 맥이 폰 핫스팟에 붙어 있으면 폰 = 기본 게이트웨이
 PHONE_SERIAL="${T33A_SERIAL:-R3CXA0DKVVV}"
 HB_REMOTE=/data/local/tmp/t33a.relay_hb
 RELAY_SH=/sdcard/Download/t33a_relay.sh
@@ -86,12 +88,25 @@ ensure_device() {
     local d tls cand ipre
     ipre=$(printf '%s' "$PHONE_IP" | sed 's/\./\\./g')   # 리터럴 dot 이스케이프
 
-    d=$("$ADB" devices 2>/dev/null | awk -v ip="$ipre" '$2=="device" && $1 ~ "^"ip":" {print $1}' | head -1)
-    [ -n "$d" ] && { echo "$d"; return 0; }
-
-    if "$ADB" connect "$PHONE_IP:5555" 2>&1 | grep -qiE "^connected|already connected"; then
-        echo "$PHONE_IP:5555"; return 0
+    # 후보 IP: 알려진 LAN IP → Tailscale IP → (맥이 핫스팟에 붙어 있으면) 기본 게이트웨이. 2026-10-13: 전역 도달.
+    local cands="$PHONE_IP $PHONE_TS_IP" gw
+    if networksetup -getairportnetwork en0 2>/dev/null | grep -qF "$HOTSPOT_SSID" \
+       || route -n get default 2>/dev/null | awk '/gateway/{print $2}' | grep -qE '^10\.'; then
+        gw=$(route -n get default 2>/dev/null | awk '/gateway/{print $2}')
+        [ -n "$gw" ] && cands="$cands $gw"
     fi
+    for cand in $cands; do
+        ipre=$(printf '%s' "$cand" | sed 's/\./\\./g')
+        d=$("$ADB" devices 2>/dev/null | awk -v ip="$ipre" '$2=="device" && $1 ~ "^"ip":" {print $1}' | head -1)
+        [ -n "$d" ] && { echo "$d"; return 0; }
+    done
+    for cand in $cands; do
+        if "$ADB" connect "$cand:5555" 2>&1 | grep -qiE "^connected|already connected"; then
+            [ "$cand" != "$PHONE_IP" ] && log "후보 경로로 접속: $cand:5555 (LAN $PHONE_IP 대신)"
+            echo "$cand:5555"; return 0
+        fi
+    done
+    ipre=$(printf '%s' "$PHONE_IP" | sed 's/\./\\./g')
 
     # 무선디버깅 TLS 포트 능동 조회 — 먼저 알려진 IP, 실패 시 시리얼로 신원 확인(DHCP 대비)
     tls=$("$ADB" mdns services 2>/dev/null | awk -v ip="$ipre" '/_adb-tls-connect/ && $3 ~ "^"ip":" {print $3}' | head -1)
