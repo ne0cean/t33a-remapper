@@ -370,7 +370,9 @@ update_live_notification() {   # $1=heartbeat age → alive/dead 판정은 여�
 echo "$(date): watchdog loop started" >> "$LOG"
 FAILS=0
 while true; do
-    # 무선 디버깅 꺼짐 감지 → 재활성화 — 단 5555 가 이미 열려 있으면 하지 않는다(2026-10-14 의장 결정, 맥 keep_levers 와 대칭).
+    # 무선 디버깅 꺼짐 감지 → 재활성화 — 단 5555 가 이미 열려 있으면 하지 않는다(2026-10-14 의장 결정).
+    # 맥 keep_levers 는 "실제 5555 세션" 을 보고 폰은 prop 만 본다(폰에서 외부 5555 피어를 확인할 수단이 없음). 그래서
+    # 폰 주소가 바뀌고 Tailscale 도 없는 경우는 아무도 플래그를 다시 켜지 않는다 — 수용한 한계(README "한계" 참고).
     # 폰은 무선 디버깅 허용을 공유기(BSSID)마다 묻는다. 상시로 켜면 새 공유기마다 "이 네트워크에서 허용?" 창이 뜬다.
     # loopback(connect_adb)·맥 접속은 5555 로 되므로, 무선 디버깅은 5555 를 다시 열어야 할 때(재부팅 뒤)만 필요하다.
     [ "$(getprop service.adb.tcp.port 2>/dev/null)" = "5555" ] || enable_wireless_adb
@@ -396,15 +398,16 @@ while true; do
         RPID=$(cat "$RELAY_PID" 2>/dev/null)
         echo "$(date): relay dead (heartbeat ${AGE}s, PID $RPID) — restarting" >> "$LOG"
         ADB_TARGET=""
-        if connect_adb && start_relay; then
+        _LB=0; connect_adb && _LB=1
+        if [ "$_LB" = 1 ] && start_relay; then
             ensure_bluetooth_on   # relay 재시작 시 ADB_TARGET 재활용해 BT도 확인(60s 스로틀)
             notify_remote_recovered   # 죽었다 살아났으면 원격 "복구됨" 알림
             update_live_notification 0
             FAILS=0
         else
-            # loopback 실패 → prop 이 5555 로 남았어도 adbd 가 내려갔을 수 있다. 무선 디버깅으로 TLS 경로를 다시 연다
-            # (PR #3 리뷰 LOW: 감시 단계 prop 게이트만으로는 낡은 5555 값에서 재무장이 없다).
-            enable_wireless_adb
+            # loopback 자체가 실패했을 때만(relay 기동 실패는 제외) 무선 디버깅 플래그를 다시 켠다 — prop 이 5555 로 남았어도
+            # adbd 가 내려갔을 수 있다. 플래그가 이미 1 이면 enable_wireless_adb 는 아무것도 안 한다(PR #3 리뷰 LOW).
+            [ "$_LB" = 1 ] || enable_wireless_adb
             notify_adb_needed
             update_live_notification "$AGE"
             FAILS=$((FAILS + 1))
