@@ -138,20 +138,23 @@ probe() {
     "$ADB" -s "$1" shell 'NOW=$(date +%s); HB=$(stat -c %Y /data/local/tmp/t33a.relay_hb 2>/dev/null || echo 0); WH=$(stat -c %Y /data/local/tmp/t33a.heartbeat 2>/dev/null || echo 0); RP=$(cat /data/local/tmp/t33a_relay.pid 2>/dev/null); [ -z "$RP" ] && RP=0; case "$RP" in *[!0-9]*) RP=0 ;; esac; RELAY=0; if [ "$RP" -gt 0 ] && [ -d /proc/$RP ]; then tr "\0" " " < /proc/$RP/cmdline 2>/dev/null | grep -q t33a_relay && RELAY=1; fi; echo "AGE=$((NOW-HB)) WHB=$((NOW-WH)) REMAP=$(pidof t33a_remap | wc -w) RELAY=$RELAY PORT=$(getprop service.adb.tcp.port) WIFI=$(settings get global adb_wifi_enabled 2>/dev/null | tr -cd "0-9") ST=$(cat /data/local/tmp/t33a.status 2>/dev/null | tr -cd "A-Za-z:_") OK=1"' 2>/dev/null | tr -d '\r'
 }
 
-# 붙어 있는 동안 두 레버를 켜 둔다. 건강할 때 호출한다 — 고장난 뒤가 아니라.
-# ① adb_wifi_enabled: 부작용 없음(adbd 재시작 안 함) → 꺼져 있으면 즉시 켠다.
+# 붙어 있는 동안 레버를 켜 둔다. 건강할 때 호출한다 — 고장난 뒤가 아니라.
 # ② service.adb.tcp.port=5555: 켜는 행위가 adbd 를 재시작시켜 relay 를 죽인다.
 #    그래서 이미 5555 면 절대 건드리지 않고, 켤 때는 relay 재기동까지 책임진다.
+# ① adb_wifi_enabled(무선 디버깅): 5555 를 다시 열어야 할 때(재부팅 뒤)만 켠다(2026-10-14 의장 결정).
+#    폰은 무선 디버깅 허용을 공유기(BSSID)마다 따로 묻는다 — 상시로 켜 두면 회사처럼 공유기가 많은 망에서
+#    처음 붙는 공유기마다 "이 네트워크에서 허용?" 창이 뜬다(10-14 11:04 WifiDebuggingActivity 실측).
+#    맥→폰 접속은 5555(LAN·Tailscale)로 하고, 5555 는 Wi-Fi 가 끊겨도 Tailscale 로 살아 있다(같은 날 실측).
 keep_levers() {
     local dev="$1" p="$2" wifi port now last nd i pp
     wifi=$(field "$p" WIFI); port=$(field "$p" PORT)
 
+    [ "$port" = "5555" ] && return 0
+
     if [ "$wifi" != "1" ]; then
         "$ADB" -s "$dev" shell "settings put global adb_wifi_enabled 1" >/dev/null 2>&1
-        log "[$dev] 무선 디버깅 꺼져 있었음(=${wifi:-빈값}) → 켬"
+        log "[$dev] 5555 닫힘(port=${port:-빈값}) + 무선 디버깅 꺼져 있었음(=${wifi:-빈값}) → 켬"
     fi
-
-    [ "$port" = "5555" ] && return 0
 
     now=$(date +%s)
     last=$(cat "$LEVER_TS_FILE" 2>/dev/null)
