@@ -156,6 +156,7 @@ keep_levers() {
     # 이 맥이 실제로 5555 세션으로 붙어 있을 때만 무선 디버깅을 놓는다. TLS(mDNS)로만 붙은 동안엔 prop 이 5555 여도
     # 플래그를 유지한다(PR #3 적대 리뷰 MEDIUM). 단 연결이 끊긴 뒤엔 이 함수가 돌지 않으므로 효과는 "붙어 있는 동안"
     # 에 한정된다 — 폰 주소 이동 + Tailscale 부재는 수용한 한계(README).
+    # 이 가드는 IP 이동 뒤 재발견을 보장하지 않는다 — 보장 수단은 Tailscale·DHCP 예약뿐(PR #3 리뷰 LOW).
     case "$dev" in *:5555) [ "$port" = "5555" ] && return 0 ;; esac
 
     if [ "$wifi" != "1" ]; then
