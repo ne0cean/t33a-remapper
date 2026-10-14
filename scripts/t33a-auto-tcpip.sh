@@ -1,5 +1,5 @@
 #!/bin/bash
-# T33A 자동 복구 데몬 v4 (Mac launchd: com.ateam.t33a-tcpip)
+# T33A 자동 복구 데몬 v7 (Mac launchd: com.ateam.t33a-tcpip)
 #
 # 역사:
 #  v1 수동형 — `adb devices`에 폰이 저절로 뜨기를 기다림(mDNS 자동연결 이벤트 의존).
@@ -7,7 +7,7 @@
 #     announce 를 잡고서야 복구 = 15시간 방치.
 #  v2 능동형 — 15s 마다 직접 붙으러 감. 단 파괴적 조치(pkill)를 백오프·재확인 없이 도입.
 #  v3 — 1차 리뷰(review-pr) CRITICAL 1·HIGH 2·MEDIUM 2 반영: 백오프, 2차 확인, relay 위임.
-#  v4 (이 파일) — 2차 렌즈 적대 리뷰 반영:
+#  v4 — 2차 렌즈 적대 리뷰 반영:
 #     ① relay 생존 판정을 /proc/<pid>/cmdline 으로 검증 (PID 재사용·stale pidfile 오탐 →
 #        "relay 살아있음" 오판 → remap kill 만 반복하며 영구 무복구 되는 경로 차단)
 #     ② 헬스 판정 3중화: relay_hb + remap 프로세스 2개(supervisor+worker) + worker
@@ -27,6 +27,9 @@
 #     그 상태에서 맥이 자리를 뜨면 폰의 위젯·boot.sh loopback 이 못 붙어 자력복구 불가.
 #     tcpip 는 adbd 를 재시작시켜 relay 를 죽이므로(2026-06 실측) 포트가 이미 5555 면
 #     건드리지 않고, 켤 때는 쿨다운 1회 + relay 재기동·검증을 동반한다.
+#  v6 — 막힌 adb 서버 자가치유(2026-10-09, heal_adb_server 위 주석).
+#  v7(2026-10-14) — 무선 디버깅 플래그는 이 맥이 5555 세션으로 붙어 있지 않을 때만 켠다. 상시로 켜면 폰이 공유기(BSSID)
+#     마다 허용 창을 띄운다. 폰 t33a_boot.sh watchdog 은 prop 기준(5555 면 안 켬). v5 의 "플래그" 부분을 대체.
 
 LOG=/tmp/t33a-tcpip.log
 STATEDIR=/tmp
@@ -138,17 +141,26 @@ probe() {
     "$ADB" -s "$1" shell 'NOW=$(date +%s); HB=$(stat -c %Y /data/local/tmp/t33a.relay_hb 2>/dev/null || echo 0); WH=$(stat -c %Y /data/local/tmp/t33a.heartbeat 2>/dev/null || echo 0); RP=$(cat /data/local/tmp/t33a_relay.pid 2>/dev/null); [ -z "$RP" ] && RP=0; case "$RP" in *[!0-9]*) RP=0 ;; esac; RELAY=0; if [ "$RP" -gt 0 ] && [ -d /proc/$RP ]; then tr "\0" " " < /proc/$RP/cmdline 2>/dev/null | grep -q t33a_relay && RELAY=1; fi; echo "AGE=$((NOW-HB)) WHB=$((NOW-WH)) REMAP=$(pidof t33a_remap | wc -w) RELAY=$RELAY PORT=$(getprop service.adb.tcp.port) WIFI=$(settings get global adb_wifi_enabled 2>/dev/null | tr -cd "0-9") ST=$(cat /data/local/tmp/t33a.status 2>/dev/null | tr -cd "A-Za-z:_") OK=1"' 2>/dev/null | tr -d '\r'
 }
 
-# 붙어 있는 동안 두 레버를 켜 둔다. 건강할 때 호출한다 — 고장난 뒤가 아니라.
-# ① adb_wifi_enabled: 부작용 없음(adbd 재시작 안 함) → 꺼져 있으면 즉시 켠다.
+# 붙어 있는 동안 레버를 켜 둔다. 건강할 때 호출한다 — 고장난 뒤가 아니라.
+# ① adb_wifi_enabled(무선 디버깅): 이 맥이 5555 세션으로 붙어 있지 않을 때(재부팅 뒤 5555 닫힘·TLS 로만 붙음)만 켠다
+#    (2026-10-14 의장 결정, v7).
+#    폰은 무선 디버깅 허용을 공유기(BSSID)마다 따로 묻는다 — 상시로 켜 두면 회사처럼 공유기가 많은 망에서
+#    처음 붙는 공유기마다 "이 네트워크에서 허용?" 창이 뜬다(10-14 11:04 WifiDebuggingActivity 실측).
+#    맥→폰 접속은 5555(LAN·Tailscale)로 하고, 5555 는 Wi-Fi 가 끊겨도 Tailscale 로 살아 있다(같은 날 실측).
 # ② service.adb.tcp.port=5555: 켜는 행위가 adbd 를 재시작시켜 relay 를 죽인다.
 #    그래서 이미 5555 면 절대 건드리지 않고, 켤 때는 relay 재기동까지 책임진다.
 keep_levers() {
     local dev="$1" p="$2" wifi port now last nd i pp
     wifi=$(field "$p" WIFI); port=$(field "$p" PORT)
 
+    # 이 맥이 실제로 5555 세션으로 붙어 있을 때만 무선 디버깅을 놓는다. TLS(mDNS)로만 붙은 동안엔 prop 이 5555 여도
+    # 플래그를 유지한다(PR #3 적대 리뷰 MEDIUM). 단 연결이 끊긴 뒤엔 이 함수가 돌지 않으므로 효과는 "붙어 있는 동안"
+    # 에 한정된다 — 폰 주소 이동 + Tailscale 부재는 수용한 한계(README).
+    case "$dev" in *:5555) [ "$port" = "5555" ] && return 0 ;; esac
+
     if [ "$wifi" != "1" ]; then
         "$ADB" -s "$dev" shell "settings put global adb_wifi_enabled 1" >/dev/null 2>&1
-        log "[$dev] 무선 디버깅 꺼져 있었음(=${wifi:-빈값}) → 켬"
+        log "[$dev] 5555 세션 아님/닫힘(port=${port:-빈값}) + 무선 디버깅 꺼져 있었음(=${wifi:-빈값}) → 켬"
     fi
 
     [ "$port" = "5555" ] && return 0
@@ -246,7 +258,7 @@ assess() {
     return 0
 }
 
-log "=== t33a-auto-tcpip v6 started (PID $$, 이월 FAILS=$FAILS) ==="
+log "=== t33a-auto-tcpip v7 started (PID $$, 이월 FAILS=$FAILS) ==="
 STATE=unknown   # alive | dead | away
 
 while true; do
