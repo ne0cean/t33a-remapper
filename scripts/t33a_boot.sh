@@ -370,8 +370,10 @@ update_live_notification() {   # $1=heartbeat age → alive/dead 판정은 여�
 echo "$(date): watchdog loop started" >> "$LOG"
 FAILS=0
 while true; do
-    # 무선 디버깅 꺼짐 감지 → 재활성화 (OS/Samsung이 임의로 끄는 경우 방어)
-    enable_wireless_adb
+    # 무선 디버깅 꺼짐 감지 → 재활성화 — 단 5555 가 이미 열려 있으면 하지 않는다(2026-10-14 의장 결정, 맥 keep_levers 와 대칭).
+    # 폰은 무선 디버깅 허용을 공유기(BSSID)마다 묻는다. 상시로 켜면 새 공유기마다 "이 네트워크에서 허용?" 창이 뜬다.
+    # loopback(connect_adb)·맥 접속은 5555 로 되므로, 무선 디버깅은 5555 를 다시 열어야 할 때(재부팅 뒤)만 필요하다.
+    [ "$(getprop service.adb.tcp.port 2>/dev/null)" = "5555" ] || enable_wireless_adb
     # relay 자체 heartbeat (10s 갱신) — 빠른 감지. 없으면 기존 t33a.heartbeat 폴백
     HB_FILE=/data/local/tmp/t33a.relay_hb
     [ ! -f "$HB_FILE" ] && HB_FILE=/data/local/tmp/t33a.heartbeat

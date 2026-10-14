@@ -3,6 +3,7 @@
 # keep_levers 단독 시험: 가짜 adb·probe·ensure_device 로 "무선 디버깅 켜기" 호출 여부만 센다
 SRC="${1:-$(cd "$(dirname "$0")/.." && pwd)/scripts/t33a-auto-tcpip.sh}"; T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 fn=$(sed -n '/^keep_levers() {/,/^}/p' "$SRC"); fld=$(grep '^field() ' "$SRC")
+[ -n "$fn" ] && [ -n "$fld" ] || { echo "ABORT: keep_levers/field 추출 실패 ($SRC)"; exit 2; }
 fails=0
 case_() { # name port wifi want
   : > "$T/calls"
