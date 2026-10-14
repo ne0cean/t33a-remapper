@@ -82,7 +82,7 @@ tail -f /tmp/t33a-tcpip.log          # 판정 로그
 ```
 - 새 맥/계정의 adb 키는 폰에서 **"이 컴퓨터에서 항상 허용"** 체크 필수(재부팅 후 재연결).
 - 맥 여러 대는 OK, **한 맥의 여러 계정 동시 설치는 금지**(5037 포트 충돌).
-- 한계: 맥 잠자기·로그아웃·폰 외부망이면 복구 불가. Apple Silicon 전제(`/opt/homebrew/bin/adb` 하드코딩), 폰 IP 기본 192.168.0.18. 다르면 `scripts/com.ateam.t33a-tcpip.plist`에 `EnvironmentVariables` → `T33A_IP` 를 넣고 재설치(셸 `export`는 launchd 데몬에 전달 안 됨). IP 가 바뀌어도 무선 디버깅 ON 이면 mDNS 로 찾은 기기를 시리얼 대조해 따라간다. 단 v7(2026-10-14)부터 5555 가 열려 있는 평상시엔 무선 디버깅을 꺼 둔다(공유기마다 뜨는 허용 창 방지) — 그래서 **폰 IP 가 바뀌고 Tailscale 도 없으면 따라가지 못한다**. 폰 IP 는 공유기 DHCP 예약으로 고정하고 Tailscale 을 켜 둘 것.
+- 한계: 맥 잠자기·로그아웃·폰 외부망이면 복구 불가. Apple Silicon 전제(`/opt/homebrew/bin/adb` 하드코딩), 폰 IP 기본 192.168.0.18. 다르면 `scripts/com.ateam.t33a-tcpip.plist`에 `EnvironmentVariables` → `T33A_IP` 를 넣고 재설치(셸 `export`는 launchd 데몬에 전달 안 됨). IP 가 바뀌어도 무선 디버깅 ON 이면 mDNS 로 찾은 기기를 시리얼 대조해 따라간다. 단 v7(2026-10-14)부터 5555 가 열려 있는 평상시엔 무선 디버깅을 새로 켜지 않는다(공유기마다 뜨는 허용 창 방지. 이미 켜져 있으면 그대로 둔다) — 그래서 **폰 IP 가 바뀌고 Tailscale 도 없으면 따라가지 못한다**. 폰 IP 는 공유기 DHCP 예약으로 고정하고 Tailscale 을 켜 둘 것.
 
 ## 최초 설치 (1회)
 
