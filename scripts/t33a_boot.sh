@@ -402,6 +402,9 @@ while true; do
             update_live_notification 0
             FAILS=0
         else
+            # loopback 실패 → prop 이 5555 로 남았어도 adbd 가 내려갔을 수 있다. 무선 디버깅으로 TLS 경로를 다시 연다
+            # (PR #3 리뷰 LOW: 감시 단계 prop 게이트만으로는 낡은 5555 값에서 재무장이 없다).
+            enable_wireless_adb
             notify_adb_needed
             update_live_notification "$AGE"
             FAILS=$((FAILS + 1))

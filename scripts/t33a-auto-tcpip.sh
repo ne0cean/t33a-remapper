@@ -1,5 +1,5 @@
 #!/bin/bash
-# T33A 자동 복구 데몬 v4 (Mac launchd: com.ateam.t33a-tcpip)
+# T33A 자동 복구 데몬 v7 (Mac launchd: com.ateam.t33a-tcpip)
 #
 # 역사:
 #  v1 수동형 — `adb devices`에 폰이 저절로 뜨기를 기다림(mDNS 자동연결 이벤트 의존).
@@ -7,7 +7,7 @@
 #     announce 를 잡고서야 복구 = 15시간 방치.
 #  v2 능동형 — 15s 마다 직접 붙으러 감. 단 파괴적 조치(pkill)를 백오프·재확인 없이 도입.
 #  v3 — 1차 리뷰(review-pr) CRITICAL 1·HIGH 2·MEDIUM 2 반영: 백오프, 2차 확인, relay 위임.
-#  v4 (이 파일) — 2차 렌즈 적대 리뷰 반영:
+#  v4 — 2차 렌즈 적대 리뷰 반영:
 #     ① relay 생존 판정을 /proc/<pid>/cmdline 으로 검증 (PID 재사용·stale pidfile 오탐 →
 #        "relay 살아있음" 오판 → remap kill 만 반복하며 영구 무복구 되는 경로 차단)
 #     ② 헬스 판정 3중화: relay_hb + remap 프로세스 2개(supervisor+worker) + worker
@@ -21,8 +21,6 @@
 #     ⑦ 폰에서 온 status 문자열을 osascript 에 넣기 전 sanitize.
 #     ⑧ IP 정규식의 리터럴 dot 이스케이프 + IP 가 바뀌어도 시리얼로 찾아가는 폴백.
 
-#  v7(2026-10-14) — 무선 디버깅 플래그는 5555 를 다시 열어야 할 때(재부팅 뒤)만 켠다. 상시로 켜면 폰이
-#     공유기(BSSID)마다 허용 창을 띄운다. 폰 t33a_boot.sh watchdog 도 같은 조건(대칭). 아래 v5 의 "플래그" 부분은 이것으로 대체.
 #  v5 — 레버 능동 유지: 붙어 있는 동안 무선 디버깅 플래그와 classic 5555 를
 #     *고장나기 전에* 켜 둔다. v4 까지는 둘 다 "이상 확정" 분기 안에서만 켰다 —
 #     즉 폰이 건강하지만 5555 가 꺼진 상태(재부팅 후 TLS 로만 붙은 경우)를 방치했고,
@@ -151,12 +149,16 @@ keep_levers() {
     local dev="$1" p="$2" wifi port now last nd i pp
     wifi=$(field "$p" WIFI); port=$(field "$p" PORT)
 
-    [ "$port" = "5555" ] && return 0
+    # 이 맥이 실제로 5555 세션으로 붙어 있을 때만 무선 디버깅을 놓는다. 폰 주소가 바뀌어 TLS(mDNS)로만 붙은 경우엔
+    # prop 이 5555 여도 플래그를 유지해야 Wi-Fi 가 흔들린 뒤에도 다시 찾는다(PR #3 적대 리뷰 MEDIUM).
+    case "$dev" in *:5555) [ "$port" = "5555" ] && return 0 ;; esac
 
     if [ "$wifi" != "1" ]; then
         "$ADB" -s "$dev" shell "settings put global adb_wifi_enabled 1" >/dev/null 2>&1
-        log "[$dev] 5555 닫힘(port=${port:-빈값}) + 무선 디버깅 꺼져 있었음(=${wifi:-빈값}) → 켬"
+        log "[$dev] 5555 세션 아님/닫힘(port=${port:-빈값}) + 무선 디버깅 꺼져 있었음(=${wifi:-빈값}) → 켬"
     fi
+
+    [ "$port" = "5555" ] && return 0
 
     now=$(date +%s)
     last=$(cat "$LEVER_TS_FILE" 2>/dev/null)
@@ -194,6 +196,8 @@ keep_levers() {
     log "[$dev] ⚠️ 5555 는 켰으나 relay 미복구 — 다음 사이클 복구 분기에 위임"
 }
 
+#  v7(2026-10-14) — 무선 디버깅 플래그는 5555 세션이 없을 때(재부팅 뒤·TLS 로만 붙음)만 켠다. 상시로 켜면 폰이
+#     공유기(BSSID)마다 허용 창을 띄운다. 폰 t33a_boot.sh watchdog 도 같은 조건(대칭). v5 의 "플래그" 부분을 대체.
 # v6 — 막힌 adb 서버 자가치유 (2026-10-09). 폰 5555 는 nc 로 열리는데 adb 만
 # "No route to host" 인 상태로 4일 방치됐다: 셸에서 데몬화돼 뜬 adb 서버가 LAN 에 못 나감.
 # launchd 소유 서버(com.ateam.t33a-adb-server, nodaemon)는 붙는다(실측). 그래서
@@ -251,7 +255,7 @@ assess() {
     return 0
 }
 
-log "=== t33a-auto-tcpip v6 started (PID $$, 이월 FAILS=$FAILS) ==="
+log "=== t33a-auto-tcpip v7 started (PID $$, 이월 FAILS=$FAILS) ==="
 STATE=unknown   # alive | dead | away
 
 while true; do
