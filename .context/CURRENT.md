@@ -1,9 +1,12 @@
 # Current Status
 
-## 🟡 2026-10-25 — 재부팅 30시간 다운 원인 = WADB Keeper 비활성화 → relay 가 되살림 + 집·회사 Wi-Fi 정책 (브랜치 `fix/wadb-revive-ssid-policy`)
+## 🟡 2026-10-25 — 재부팅 30시간 다운 원인 = WADB Keeper 비활성화 → relay 가 되살림 + 집·회사 Wi-Fi 정책 (PR #5 머지 `9fd58c1`)
 - 증상: 10-24 10:32 재부팅 뒤 리매퍼 미복구(heartbeat 110,735s). 폰 Termux watchdog 은 2분마다 WADB Keeper 킥을 쐈고 `result=0` 이었지만 무선 디버깅은 꺼진 채 → 맥이 붙을 길 없음. 의장이 무선 디버깅 수동 ON → 17:16:28 맥 데몬이 12초 만에 복구.
 - 원인(실측): WADB Keeper 가 `enabled=4`(DISABLED_UNTIL_USED, 삼성/안드로이드의 미사용 앱 처리 추정). 이 상태면 킥이 성공으로 돌아와도 플래그 0 그대로. 셸 `pm enable` 은 권한 거부, **앱 화면(`.Main`) 1회 실행으로 4→0** 복귀, 이후 킥 0→1 확인.
 - 수리: relay(shell) ①10분마다 enabled=4 면 `.Main` 실행 ②1분마다 Wi-Fi 정책 — `NOIR_5G`·`twnap` 이면 무선 디버깅 켬, 지정 밖이면 5555 열림일 때만 끔. 폰 배포(md5 일치)·relay 재기동(데몬 PID 유지)·장애주입(끔→50초 만에 자동 켬) 확인. 테스트 relay_policy 11/11, keep_levers 10/10.
+- 리뷰: review-pr HIGH 티어 → REQUEST_CHANGES(H1 루프 배선 미검증·H2 relay 사망 구간·M1 stopped·M2 재시도 상한·M3) → 반영 커밋 `7838fa1`(periodic_checks 분리, 테스트 16/16, 변이 5종 감지) → 재검증 APPROVE → 의장 머지. 폰 relay md5 = main 일치.
+- 비활성화 출처(17:40 실측, 유력): 삼성 "사용하지 않는 앱 자동 절전"(ON) 의 **깊은 절전** — 설명이 "열면 다시 활성화"로 DISABLED_UNTIL_USED 와 같은 동작. 오전까지 WADB Keeper 는 배터리 '제한 없음'이 아니어서 대상이었다. `cmd deviceidle whitelist +com.ateam.wadbkeeper` 후 설정 화면에 '제한 없음' 표시(스크린샷 확인), "절대 자동 절전 안 함" 추가 목록에 안 나옴 = 대상 제외. Termux·Termux:Boot·MacroDroid 도 이미 '제한 없음'. app_hibernation=false, AUTO_REVOKE 앱옵스 ignore.
+- 실수·원복: 앱 정보 "사용하지 않는 앱 관리"를 하위 메뉴로 알고 탭 → 토글이 켜짐 → 즉시 끔(앱·UID 모드 ignore, 스크린샷 확인). 검색용으로 IME 를 삼성 키보드로 잠시 바꿨다가 모아키로 원복.
 - 미검증: ①enabled=4 자동 되살리기는 셸이 상태를 4로 만들 수 없어 장애주입 불가(수동 동등 동작만 실측) ②**실제 재부팅 e2e**(잠금해제 후 사람 손 없이 복구)는 아직.
 
 ## ✅ 2026-10-11 — 새 계정(1109386)에 맥 복구 데몬 재설치 + tcpip plist 레포 편입 (커밋 `0deeb72`)
@@ -129,6 +132,7 @@ T33A BLE 리모컨 → 말해보카 앱 키 리매퍼. **standalone + 재부팅 
 - 원인: relay 25초 주기 사망 시 daemon도 같이 죽었던 구조 → 픽스로 해소
 
 ## ⏩ Next Tasks
+-6. **🚀 10-25 수리 실재부팅 e2e (최우선)**: 폰 재부팅 → 잠금해제 → 사람 손 없이 리매퍼 복구되는지. 확인: 폰 `/sdcard/Download/t33a_boot.log`(WADB Keeper broadcast 후 무선 디버깅 ON), 맥 `/tmp/t33a-tcpip.log`(TLS 접속→tcpip 5555→✅ 복구). 회사 twnap 에서 하루 뒤 `grep "wifi policy" /sdcard/Download/t33a.log` 로 켬 빈도(허용 창 진동) 확인.
 -5. **1109386 계정 재부팅 e2e + 다른 맥 설치** (10-11 PMI UNVERIFIED): ①폰 재부팅 → 잠금해제 → `/tmp/t33a-tcpip.log`에 이 계정 키로 자동 복구 찍히는지(새 adb 키 — 폰 "항상 허용" 체크 확인) ②다른 맥 설치 — **절차 정본 `.context/RESUME.md`** (그 맥에서 이 레포 열고 `/pickup`). 한 맥에서 noir·1109386 두 계정 동시 설치 금지(5037 충돌). (선택) 리뷰 LOW 3: sed 특수문자 HOME·주석 순서·tcpip bootstrap rc.
 -4. **heal 경로 라이브 확인 (다음 장애 시)**: 리매퍼가 안 되면 `/tmp/t33a-tcpip.log`에 `adb 서버 교체 완료` 찍혔는지 확인. 없으면 heal 미발화 → 막힘 기전(샌드박스 스폰 vs 로컬 네트워크 권한) 재조사.
 -3.5. ~~10-09 리뷰 LOW 2건 + 정리~~ ✅ 10-09 완료: install PID 매 회 `launchctl print` 재조회 · 심링크를 메인 체크아웃 대상 `-ef` 대조로 교정 · 루트 CLAUDE.md 1줄 · worktree 제거. shellcheck 0.11.0(공식 릴리스 바이너리, brew는 세션 샌드박스 안에서 bottle 추출이 TERM으로 죽음) — 버그 0: SC2034 미사용 루프 변수 `i` ×2, SC2086 숫자 uid `$U` 미인용, SC2016 의도된 작은따옴표. 수정 불필요.
