@@ -129,12 +129,17 @@ is_heartbeat_stale() {
     [ "$age" -gt "$HEARTBEAT_STALE_SEC" ]
 }
 
-# 현재 Wi-Fi 이름. 연결 안 됨이면 빈 값.
+# 현재 Wi-Fi 이름. 연결 안 됨이면 빈 값. system_server 가 멈춰도 1초 루프가 묶이지 않게 5초 제한.
 current_ssid() {
-    cmd wifi status 2>/dev/null | sed -n 's/^Wifi is connected to "\(.*\)"$/\1/p' | head -1
+    timeout 5 cmd wifi status 2>/dev/null | sed -n 's/^Wifi is connected to "\(.*\)"$/\1/p' | head -1
 }
 
 # 지정 Wi-Fi 면 무선 디버깅을 켜 두고, 아니면 끈다(5555 열림일 때만). Wi-Fi 없음이면 손대지 않는다.
+# 지정 Wi-Fi 에서 켠 뒤에도 OS 가 다시 끄면(새 공유기 허용 창을 취소·방치한 경우) 같은 Wi-Fi 에선 3번까지만 다시 켠다
+# — 허용 창이 1분마다 다시 뜨는 진동 방지. Wi-Fi 가 바뀌거나 켜진 상태가 확인되면 횟수를 되돌린다.
+# 맥(t33a-auto-tcpip.sh keep_levers)·폰 Termux(t33a_boot.sh watchdog)는 5555 가 닫혔을 때만 켜고, 끄는 주체는 여기뿐이다.
+WIFI_ON_RETRIES=0
+WIFI_ON_SSID=""
 wifi_debug_policy() {
     local ssid cur port s allowed=0
     ssid=$(current_ssid)
@@ -142,8 +147,12 @@ wifi_debug_policy() {
     for s in $WIFI_DEBUG_SSIDS; do [ "$s" = "$ssid" ] && allowed=1; done
     cur=$(settings get global adb_wifi_enabled 2>/dev/null)
     port=$(getprop service.adb.tcp.port 2>/dev/null)
+    [ "$ssid" != "$WIFI_ON_SSID" ] && { WIFI_ON_SSID="$ssid"; WIFI_ON_RETRIES=0; }
+    [ "$cur" = "1" ] && WIFI_ON_RETRIES=0
     if [ "$allowed" = 1 ] && [ "$cur" != "1" ]; then
-        settings put global adb_wifi_enabled 1 && log "wifi policy: [$ssid] 지정 Wi-Fi — 무선 디버깅 켬"
+        if [ "$WIFI_ON_RETRIES" -ge 3 ]; then return 0; fi
+        WIFI_ON_RETRIES=$((WIFI_ON_RETRIES + 1))
+        settings put global adb_wifi_enabled 1 && log "wifi policy: [$ssid] 지정 Wi-Fi — 무선 디버깅 켬 (${WIFI_ON_RETRIES}/3)"
     elif [ "$allowed" = 0 ] && [ "$cur" = "1" ] && [ "$port" = "5555" ]; then
         settings put global adb_wifi_enabled 0 && log "wifi policy: [$ssid] 지정 밖 Wi-Fi — 무선 디버깅 끔(5555 유지)"
     fi
@@ -152,12 +161,30 @@ wifi_debug_policy() {
 # 삼성·안드로이드가 쓰지 않는 앱으로 보고 WADB Keeper 를 '쓸 때까지 비활성'(enabled=4)으로 돌리면
 # 부팅 신호도 킥도 못 받아 재부팅 복구가 끊긴다(2026-10-24 재부팅 30시간 다운의 원인).
 # 셸은 pm enable 권한이 없지만 앱 화면을 한 번 띄우면 '사용'으로 돌아온다(10-25 실측: 4 → 0).
+# 강제 정지(stopped=true)도 부팅 신호를 못 받는 같은 증상이라 같이 푼다. 사용자가 끈 3·2 는 화면 실행으로 안 풀리므로 손대지 않는다.
+# 한계: relay 가 살아 있는 동안만 돈다. 재부팅 직후 앱이 이미 비활성이면 relay 도 못 뜨므로 막지 못한다.
 wadb_keeper_revive() {
-    local st
-    st=$(dumpsys package "$WADB_PKG" 2>/dev/null | sed -n 's/.*User 0:.*enabled=\([0-9]\).*/\1/p' | head -1)
-    [ "$st" = "4" ] || return 0
+    local line st stopped
+    line=$(timeout 5 dumpsys package "$WADB_PKG" 2>/dev/null | grep 'User 0:' | grep 'enabled=' | head -1)
+    st=$(echo "$line" | sed -n 's/.*enabled=\([0-9]\).*/\1/p')
+    stopped=$(echo "$line" | sed -n 's/.*stopped=\([a-z]*\).*/\1/p')
+    [ "$st" = "4" ] || [ "$stopped" = "true" ] || return 0
     am start --user 0 -n "$WADB_PKG/.Main" >/dev/null 2>&1
-    log "WADB Keeper 비활성(enabled=4) 감지 — 앱 화면 실행으로 되살림"
+    log "WADB Keeper 비활성(enabled=$st stopped=$stopped) 감지 — 앱 화면 실행으로 되살림"
+}
+
+# 1초 루프에서 매 틱 부른다. 간격마다 정책·점검을 돌린다(배선 테스트가 이 함수를 직접 돌려 호출 횟수를 센다).
+periodic_checks() {
+    wifi_tick=$((wifi_tick + 1))
+    if [ "$wifi_tick" -ge "$WIFI_POLICY_INTERVAL" ]; then
+        wifi_debug_policy
+        wifi_tick=0
+    fi
+    wadb_tick=$((wadb_tick + 1))
+    if [ "$wadb_tick" -ge "$WADB_CHECK_INTERVAL" ]; then
+        wadb_keeper_revive
+        wadb_tick=0
+    fi
 }
 
 # relay 재시작 시 daemon이 살아있으면 건드리지 않음 (BLE 연결 유지)
@@ -174,8 +201,8 @@ fi
 log "watchdog loop started"
 tick=0
 battery_tick=0
-wifi_tick=$WIFI_POLICY_INTERVAL   # 기동 직후 첫 틱에 바로 점검
-wadb_tick=$WADB_CHECK_INTERVAL
+wifi_tick=0   # 첫 점검은 기동 1분 뒤 — 맥이 relay 를 되살리고 검증하는 동안 TLS 를 끊지 않게
+wadb_tick=$((WADB_CHECK_INTERVAL - 60))   # 앱 점검은 기동 1분 뒤 첫 회
 hung_postmortem_done=0
 while true; do
     if [ -f "$CMD" ]; then
@@ -227,16 +254,7 @@ while true; do
         battery_tick=0
     fi
 
-    wifi_tick=$((wifi_tick + 1))
-    if [ "$wifi_tick" -ge "$WIFI_POLICY_INTERVAL" ]; then
-        wifi_debug_policy
-        wifi_tick=0
-    fi
-    wadb_tick=$((wadb_tick + 1))
-    if [ "$wadb_tick" -ge "$WADB_CHECK_INTERVAL" ]; then
-        wadb_keeper_revive
-        wadb_tick=0
-    fi
+    periodic_checks
 
     sleep 1
     tick=$((tick + 1))
