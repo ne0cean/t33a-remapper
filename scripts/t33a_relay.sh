@@ -15,6 +15,12 @@ STATUS=/data/local/tmp/t33a.status
 POSTMORTEM_DIR=/sdcard/Download
 HEARTBEAT_STALE_SEC=180   # heartbeat 60s × 3 = 3분 이상 없으면 hung
 BATTERY_LOG_INTERVAL=300  # 5분마다 배터리/절전 상태 로그
+WIFI_POLICY_INTERVAL=60   # 무선 디버깅 정책 점검 간격(초)
+WADB_CHECK_INTERVAL=600   # WADB Keeper 비활성화 점검 간격(초)
+# 무선 디버깅을 켜 둘 Wi-Fi(공백 구분, 2026-10-25 의장 결정: 집·회사). 폰은 허용을 공유기마다 따로 묻기 때문에
+# 이 밖의 Wi-Fi 에서는 끈다. 단 5555 가 닫혀 있으면(재부팅 뒤) 복구 경로라서 어느 Wi-Fi 든 건드리지 않는다.
+WIFI_DEBUG_SSIDS="NOIR_5G twnap"
+WADB_PKG=com.ateam.wadbkeeper
 
 # 중복 실행 방지
 if [ -f "$RELAY_PID" ]; then
@@ -123,6 +129,37 @@ is_heartbeat_stale() {
     [ "$age" -gt "$HEARTBEAT_STALE_SEC" ]
 }
 
+# 현재 Wi-Fi 이름. 연결 안 됨이면 빈 값.
+current_ssid() {
+    cmd wifi status 2>/dev/null | sed -n 's/^Wifi is connected to "\(.*\)"$/\1/p' | head -1
+}
+
+# 지정 Wi-Fi 면 무선 디버깅을 켜 두고, 아니면 끈다(5555 열림일 때만). Wi-Fi 없음이면 손대지 않는다.
+wifi_debug_policy() {
+    local ssid cur port s allowed=0
+    ssid=$(current_ssid)
+    [ -z "$ssid" ] && return 0
+    for s in $WIFI_DEBUG_SSIDS; do [ "$s" = "$ssid" ] && allowed=1; done
+    cur=$(settings get global adb_wifi_enabled 2>/dev/null)
+    port=$(getprop service.adb.tcp.port 2>/dev/null)
+    if [ "$allowed" = 1 ] && [ "$cur" != "1" ]; then
+        settings put global adb_wifi_enabled 1 && log "wifi policy: [$ssid] 지정 Wi-Fi — 무선 디버깅 켬"
+    elif [ "$allowed" = 0 ] && [ "$cur" = "1" ] && [ "$port" = "5555" ]; then
+        settings put global adb_wifi_enabled 0 && log "wifi policy: [$ssid] 지정 밖 Wi-Fi — 무선 디버깅 끔(5555 유지)"
+    fi
+}
+
+# 삼성·안드로이드가 쓰지 않는 앱으로 보고 WADB Keeper 를 '쓸 때까지 비활성'(enabled=4)으로 돌리면
+# 부팅 신호도 킥도 못 받아 재부팅 복구가 끊긴다(2026-10-24 재부팅 30시간 다운의 원인).
+# 셸은 pm enable 권한이 없지만 앱 화면을 한 번 띄우면 '사용'으로 돌아온다(10-25 실측: 4 → 0).
+wadb_keeper_revive() {
+    local st
+    st=$(dumpsys package "$WADB_PKG" 2>/dev/null | sed -n 's/.*User 0:.*enabled=\([0-9]\).*/\1/p' | head -1)
+    [ "$st" = "4" ] || return 0
+    am start --user 0 -n "$WADB_PKG/.Main" >/dev/null 2>&1
+    log "WADB Keeper 비활성(enabled=4) 감지 — 앱 화면 실행으로 되살림"
+}
+
 # relay 재시작 시 daemon이 살아있으면 건드리지 않음 (BLE 연결 유지)
 EXISTING_PID=$(cat /data/local/tmp/t33a.pid 2>/dev/null)
 if [ -n "$EXISTING_PID" ] && kill -0 "$EXISTING_PID" 2>/dev/null; then
@@ -137,6 +174,8 @@ fi
 log "watchdog loop started"
 tick=0
 battery_tick=0
+wifi_tick=$WIFI_POLICY_INTERVAL   # 기동 직후 첫 틱에 바로 점검
+wadb_tick=$WADB_CHECK_INTERVAL
 hung_postmortem_done=0
 while true; do
     if [ -f "$CMD" ]; then
@@ -186,6 +225,17 @@ while true; do
     if [ "$battery_tick" -ge "$BATTERY_LOG_INTERVAL" ]; then
         log_power_state "periodic"
         battery_tick=0
+    fi
+
+    wifi_tick=$((wifi_tick + 1))
+    if [ "$wifi_tick" -ge "$WIFI_POLICY_INTERVAL" ]; then
+        wifi_debug_policy
+        wifi_tick=0
+    fi
+    wadb_tick=$((wadb_tick + 1))
+    if [ "$wadb_tick" -ge "$WADB_CHECK_INTERVAL" ]; then
+        wadb_keeper_revive
+        wadb_tick=0
     fi
 
     sleep 1
