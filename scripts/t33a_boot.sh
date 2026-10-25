@@ -375,6 +375,7 @@ while true; do
     # 폰 주소가 바뀌고 Tailscale 도 없는 경우는 아무도 플래그를 다시 켜지 않는다 — 수용한 한계(README "한계" 참고).
     # 폰은 무선 디버깅 허용을 공유기(BSSID)마다 묻는다. 상시로 켜면 새 공유기마다 "이 네트워크에서 허용?" 창이 뜬다.
     # loopback(connect_adb)·맥 접속은 5555 로 되므로, 무선 디버깅은 5555 를 다시 열어야 할 때(재부팅 뒤)만 필요하다.
+    # 평상시 켬/끔은 relay 의 Wi-Fi 이름 정책이 맡는다(2026-10-25, t33a_relay.sh wifi_debug_policy).
     [ "$(getprop service.adb.tcp.port 2>/dev/null)" = "5555" ] || enable_wireless_adb
     # relay 자체 heartbeat (10s 갱신) — 빠른 감지. 없으면 기존 t33a.heartbeat 폴백
     HB_FILE=/data/local/tmp/t33a.relay_hb

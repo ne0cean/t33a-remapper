@@ -1,5 +1,11 @@
 # Current Status
 
+## 🟡 2026-10-25 — 재부팅 30시간 다운 원인 = WADB Keeper 비활성화 → relay 가 되살림 + 집·회사 Wi-Fi 정책 (브랜치 `fix/wadb-revive-ssid-policy`)
+- 증상: 10-24 10:32 재부팅 뒤 리매퍼 미복구(heartbeat 110,735s). 폰 Termux watchdog 은 2분마다 WADB Keeper 킥을 쐈고 `result=0` 이었지만 무선 디버깅은 꺼진 채 → 맥이 붙을 길 없음. 의장이 무선 디버깅 수동 ON → 17:16:28 맥 데몬이 12초 만에 복구.
+- 원인(실측): WADB Keeper 가 `enabled=4`(DISABLED_UNTIL_USED, 삼성/안드로이드의 미사용 앱 처리 추정). 이 상태면 킥이 성공으로 돌아와도 플래그 0 그대로. 셸 `pm enable` 은 권한 거부, **앱 화면(`.Main`) 1회 실행으로 4→0** 복귀, 이후 킥 0→1 확인.
+- 수리: relay(shell) ①10분마다 enabled=4 면 `.Main` 실행 ②1분마다 Wi-Fi 정책 — `NOIR_5G`·`twnap` 이면 무선 디버깅 켬, 지정 밖이면 5555 열림일 때만 끔. 폰 배포(md5 일치)·relay 재기동(데몬 PID 유지)·장애주입(끔→50초 만에 자동 켬) 확인. 테스트 relay_policy 11/11, keep_levers 10/10.
+- 미검증: ①enabled=4 자동 되살리기는 셸이 상태를 4로 만들 수 없어 장애주입 불가(수동 동등 동작만 실측) ②**실제 재부팅 e2e**(잠금해제 후 사람 손 없이 복구)는 아직.
+
 ## ✅ 2026-10-11 — 새 계정(1109386)에 맥 복구 데몬 재설치 + tcpip plist 레포 편입 (커밋 `0deeb72`)
 - 증상: 이 계정엔 `com.ateam.t33a-tcpip`·`t33a-adb-server` 둘 다 미등록, `~/bin` 부재 → 같은 LAN 에 있어도 복구 0. tcpip plist 가 레포에 없어 install 의 `kickstart` 가 허공.
 - 수리: `scripts/com.ateam.t33a-tcpip.plist`(`__HOME__` 템플릿) 신설, install 이 `~/bin`·LaunchAgents 생성 + 두 에이전트 bootout→bootstrap.
