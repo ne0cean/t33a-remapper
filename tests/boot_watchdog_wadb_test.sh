@@ -25,4 +25,11 @@ dead_() { # name connect_rc want [start_rc]
 dead_ "relay 사망+재연결 실패 → 무선 디버깅 켬" 1 1
 dead_ "relay 사망+재연결 성공 → 켜지 않음" 0 0
 dead_ "relay 사망+재연결 성공·relay 기동 실패 → 켜지 않음(loopback 정상)" 0 0 1
+# 같은 셸에서 2틱: 앞 틱이 재연결 성공으로 _LB=1 을 남겨도 다음 틱의 재연결 실패에선 켠다(_LB 이월 방지, PR #3 적대 LOW)
+got=$(bash -c "n=0; t=0; enable_wireless_adb(){ n=\$((n+1)); }; connect_adb(){ t=\$((t+1)); [ \$t = 1 ]; }; start_relay(){ return 1; }
+  ensure_bluetooth_on(){ :; }; notify_remote_recovered(){ :; }; notify_adb_needed(){ :; }; update_live_notification(){ :; }
+  $blk
+  $blk
+  echo \$n")
+[ "$got" = 1 ] && echo "PASS 2틱: 재연결 성공 뒤 실패 → 켬(_LB 이월 없음)" || { echo "FAIL 2틱 _LB 이월 (want 1 got $got)"; fails=$((fails+1)); }
 echo "fails=$fails"; exit $fails
