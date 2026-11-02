@@ -607,3 +607,9 @@
 
 **빌드**: ✅ (bash -n boot.sh·revive.sh PASS, 테스트 스위트 없음=셸 프로젝트)
 **커밋**: 5f4ddd8(feat) 4974e90(docs) be2cc56(fix HIGH)
+
+## [2026-10-25] 재부팅 30시간 다운 — WADB Keeper 깊은 절전 비활성화 진단·수리
+
+**완료**: 원인 실측(WADB Keeper enabled=4, 킥 result=0 인데 플래그 0) → 앱 화면 실행으로 복귀 확인. relay 에 WADB Keeper 되살리기(10분)·Wi-Fi 이름 정책(NOIR_5G·twnap 만 무선 디버깅 ON, 재시도 3회 상한) 추가, PR #5 리뷰 2패스(REQUEST_CHANGES→APPROVE) 후 머지 `9fd58c1`, 폰 배포·장애주입 60초 자동 복구. WADB Keeper 배터리 '제한 없음' 등록(삼성 깊은 절전 제외).
+**이슈**: 머지는 자동 모드 분류기가 차단해 의장이 실행. 실재부팅 e2e 미검증. "사용하지 않는 앱 관리" 토글 오탭 → 즉시 원복.
+**빌드**: ✅ relay_policy 16/16, keep_levers·boot_watchdog_wadb fails=0
