@@ -66,9 +66,12 @@ fi
 # [3] 스크립트 변경 시 /sdcard/Download로 복사
 if [ "$CHANGED_SCRIPTS" -gt 0 ]; then
     # 레포 사본과 같게 맞춘다 — 원자 교체(임시 파일 → cmp → mv)라 끊겨도 잘린 사본이 남지 않는다. 규칙은 t33a_sync.sh 한 곳.
-    T33A_REPO_SCRIPTS="$REPO/scripts"; . "$REPO/scripts/t33a_sync.sh"
-    t33a_sync_dl "$SCRIPTS_DST" "$LOG"
-    log "스크립트 갱신: boot/relay/start/status"
+    if [ -s "$REPO/scripts/t33a_sync.sh" ] && T33A_REPO_SCRIPTS="$REPO/scripts" && . "$REPO/scripts/t33a_sync.sh"; then
+        t33a_sync_dl "$SCRIPTS_DST" "$LOG"
+        log "스크립트 갱신: boot/relay/start/status"
+    else
+        log "ERROR: $REPO/scripts/t33a_sync.sh 를 읽지 못함 — 다운로드 폴더 사본 맞추기 생략(레포 확인 필요)"
+    fi
 fi
 
 # [3.5] boot.sh 즉시 활성화 — $BOOT_DIR 설치 + watchdog 재시작
@@ -76,7 +79,11 @@ fi
 if [ "$CHANGED_SCRIPTS" -gt 0 ]; then
     BOOT_DIR="$HOME/.termux/boot"
     mkdir -p "$BOOT_DIR"
-    t33a_install "$REPO/scripts/t33a_boot.sh" "$BOOT_DIR/t33a_boot.sh"   # 원자 교체 — 돌고 있는 옛 boot.sh 를 깨뜨리지 않는다
+    if command -v t33a_install >/dev/null 2>&1; then
+        t33a_install "$REPO/scripts/t33a_boot.sh" "$BOOT_DIR/t33a_boot.sh"   # 원자 교체 — 돌고 있는 옛 boot.sh 를 깨뜨리지 않는다
+    else
+        log "ERROR: t33a_install 없음 — 부팅 사본 갱신 생략(옛 사본으로 재기동)"
+    fi
     OLD_BOOT=$(pgrep -f "t33a_boot.sh" 2>/dev/null | head -1)
     if [ -n "$OLD_BOOT" ]; then
         kill "$OLD_BOOT" 2>/dev/null

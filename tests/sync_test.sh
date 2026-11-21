@@ -124,7 +124,7 @@ cmp -s "$H/.termux/boot/t33a_boot.sh" "$T/repo/t33a_boot.sh" && [ "$(inode "$H/.
 # 13. setup_phone.sh 의 사본 쓰기 구간 실행(네 번째 쓰는 곳 — 같은 복사기를 써야 한다)
 fresh; H="$T/shome"; rm -rf "$H"; mkdir -p "$H/.termux/boot"; echo old-boot > "$H/.termux/boot/t33a_boot.sh"; i=$(inode "$H/.termux/boot/t33a_boot.sh")
 cp "$LIB" "$T/repo/t33a_sync.sh"
-blk=$( { sed -n '/^# boot.sh를 Termux:Boot에 등록/,/Termux:Boot 등록 완료"/p' "$ROOT/scripts/t33a_setup_phone.sh"; grep '^t33a_sync_dl /sdcard/Download' "$ROOT/scripts/t33a_setup_phone.sh"; } | sed "s#/sdcard/Download#$T/dl#g")
+blk=$( { sed -n '/^# boot.sh를 Termux:Boot에 등록/,/^esac$/p' "$ROOT/scripts/t33a_setup_phone.sh"; grep '^t33a_sync_dl /sdcard/Download' "$ROOT/scripts/t33a_setup_phone.sh"; } | sed "s#/sdcard/Download#$T/dl#g")
 [ "$(printf '%s\n' "$blk" | grep -c 't33a_')" -ge 3 ] || fail "setup_phone.sh 구간 추출 실패"
 # setup_phone.sh 는 9행이 set -e — 원본처럼 set -e 아래에서 돌리고, 교체가 일어나는 첫 설치가 구간 끝까지 가는지 본다
 grep -q '^set -e' "$ROOT/scripts/t33a_setup_phone.sh" || fail "setup_phone.sh 의 set -e 가 사라짐(시험 전제 확인)"
@@ -133,5 +133,54 @@ grep -q REACHED_END "$T/setup_out" && grep -q 'Termux:Boot 등록 완료' "$T/se
   || fail "setup_phone.sh: set -e 에서 중간 종료 — 출력[$(tr '\n' '|' < "$T/setup_out")]"
 same_all && cmp -s "$H/.termux/boot/t33a_boot.sh" "$T/repo/t33a_boot.sh" && [ "$(inode "$H/.termux/boot/t33a_boot.sh")" != "$i" ] \
   && pass "setup_phone.sh: 다운로드 5개·부팅 사본을 레포와 같게(원자 교체)" || fail "setup_phone.sh 구간 후 불일치"
+
+# 14. Termux:Boot 폴더가 대상이면 임시 파일은 그 폴더 밖(~/.termux)에 — Termux:Boot 는 숨김 파일도 실행한다
+fresh; X="$T/x"; rm -rf "$X"; mkdir -p "$X/.termux/boot"; rm -f "$T/cpdst"
+printf '#!/bin/bash\necho "$2" >> %s/cpdst\nexec /bin/cp "$@"\n' "$T" > "$T/fbin/cp"; chmod +x "$T/fbin/cp"
+( export PATH="$T/fbin:$PATH" T33A_REPO_SCRIPTS="$T/repo"; . "$LIB"; t33a_install "$T/repo/t33a_boot.sh" "$X/.termux/boot/t33a_boot.sh" || : )
+[ "$(dirname "$(head -1 "$T/cpdst")")" = "$X/.termux" ] && cmp -s "$T/repo/t33a_boot.sh" "$X/.termux/boot/t33a_boot.sh" && [ -z "$(ls -A "$X/.termux/boot" | grep sync)" ] \
+  && pass "부팅 폴더 대상: 임시 파일은 ~/.termux 에, 교체는 성공" || fail "부팅 폴더 임시 파일 위치: $(head -1 "$T/cpdst")"
+
+# 15. 레포 .sh 사본이 문법 오류(잘린 git 갱신)면 반환 4, 대상 보존, 경고 1회. .sh 아닌 래퍼는 검사하지 않음
+fresh; printf 'if true; then\n  echo half\n' > "$T/repo/t33a_relay.sh"; echo keep > "$T/dl/t33a_relay.sh"; printf 'x(\n' > "$T/repo/T33A_status_wrapper"
+run bash -c ". '$LIB'; t33a_sync_dl '$T/dl' '$T/log'; t33a_sync_dl '$T/dl' '$T/log'"
+[ "$(cat "$T/dl/t33a_relay.sh")" = keep ] && [ "$(grep -c 't33a_relay.sh 맞추기 못함 — 레포 사본 문법 오류' "$T/log")" = 1 ] && pass "문법 오류 레포 사본: 대상 보존·경고 1회" \
+  || fail "문법 오류: 대상=[$(cat "$T/dl/t33a_relay.sh")] 경고 $(grep -c '문법 오류' "$T/log")"
+cmp -s "$T/repo/T33A_status_wrapper" "$T/dl/T33A_status_wrapper" && pass "문법 검사는 .sh 만(래퍼는 그대로 맞춤)" || fail "래퍼까지 문법 검사"
+( export T33A_REPO_SCRIPTS="$T/repo"; . "$LIB"; : > "$T/log"
+  printf 'if true; then\n' > "$T/repo/t33a_relay.sh"; t33a_sync_dl "$T/dl" "$T/log"
+  echo 'echo ok' > "$T/repo/t33a_relay.sh"; t33a_sync_dl "$T/dl" "$T/log"
+  printf 'if true; then\n' > "$T/repo/t33a_relay.sh"; t33a_sync_dl "$T/dl" "$T/log" )
+[ "$(grep -c 't33a_relay.sh 맞추기 못함 — 레포 사본 문법 오류' "$T/log")" = 2 ] && pass "문법 오류 경고도 회복 뒤 재무장" || fail "문법 오류 재무장: $(grep -c '문법 오류' "$T/log")"
+printf 'if true; then\n' > "$T/repo/t33a_relay.sh"
+run t33a_install "$T/repo/t33a_relay.sh" "$T/dl/t33a_relay.sh"; [ $? = 4 ] && pass "문법 오류 → 반환 4" || fail "문법 오류 반환값"
+
+# 16. setup_phone.sh: 부팅 사본 설치가 실패해도(set -e) 끝까지 가고 경고를 낸다
+fresh; H="$T/shome2"; rm -rf "$H"; mkdir -p "$H/.termux/boot"; cp "$LIB" "$T/repo/t33a_sync.sh"; rm "$T/repo/t33a_boot.sh"
+blk=$( { sed -n '/^# boot.sh를 Termux:Boot에 등록/,/^esac$/p' "$ROOT/scripts/t33a_setup_phone.sh"; } | sed "s#/sdcard/Download#$T/dl#g")
+( set -e; REPO="$T/urepo"; BOOT_DIR="$H/.termux/boot"; eval "$blk"; echo REACHED_END ) > "$T/setup_out" 2>&1
+grep -q REACHED_END "$T/setup_out" && grep -q '⚠️ Termux:Boot 등록 실패(반환 2' "$T/setup_out" && ! grep -q '등록 완료' "$T/setup_out" \
+  && pass "setup_phone.sh: 설치 실패 시 경고(반환 2)·끝까지 진행" || fail "setup 실패 경로: [$(tr '\n' '|' < "$T/setup_out")]"
+
+# 17. update.sh: t33a_sync.sh 를 못 읽으면 [3] 은 ERROR 를 남기고, [3.5] 는 설치를 건너뛰며 끊기지 않는다
+fresh; rm -f "$T/repo/t33a_sync.sh"; H="$T/uhome2"; rm -rf "$H"; mkdir -p "$H/.termux/boot"; echo old-boot > "$H/.termux/boot/t33a_boot.sh"
+blk=$( { sed -n '/^# \[3\] 스크립트 변경 시/,/^# \[3.5\]/p'; } < "$ROOT/scripts/t33a_update.sh"; sed -n '/^# \[3.5\] boot.sh 즉시 활성화/,/^# \[3.7\]/p' "$ROOT/scripts/t33a_update.sh" | sed "s#/sdcard/Download#$T/dl#g")
+( env -i PATH="$T/pbin:/usr/bin:/bin" HOME="$H" bash -c "REPO='$T/urepo'; SCRIPTS_DST='$T/dl'; CHANGED_SCRIPTS=1; log() { echo \"\$*\" >> '$T/ulog'; }
+$blk
+echo REACHED_END" ) > "$T/uout" 2>&1
+grep -q REACHED_END "$T/uout" && grep -q 't33a_sync.sh 를 읽지 못함' "$T/ulog" && grep -q 't33a_install 없음' "$T/ulog" && [ "$(cat "$H/.termux/boot/t33a_boot.sh")" = old-boot ] \
+  && pass "update.sh: 복사기 못 읽으면 ERROR 로그·설치 생략·끝까지 진행" || fail "update.sh 복사기 없음: [$(tr '\n' '|' < "$T/ulog" 2>/dev/null)] [$(tail -2 "$T/uout" | tr '\n' '|')]"
+rm -f "$T/ulog"
+
+# 18. 부팅 폴더가 아직 없어도(mkdir -p 배선) start.sh·update.sh [3.5] 가 만들고 설치한다
+fresh; cp "$LIB" "$T/repo/t33a_sync.sh"
+H="$T/home3"; rm -rf "$H"; mkdir -p "$H/t33a-remapper"; ln -s "$T/repo" "$H/t33a-remapper/scripts"
+blk=$(sed -n '/^# 레포 사본에서 원자 설치/,/^true$/p' "$ROOT/scripts/t33a_start.sh" | sed "s#/sdcard/Download#$T/dl#g")
+( HOME="$H"; BOOT_DIR="$H/.termux/boot"; eval "$blk" )
+cmp -s "$H/.termux/boot/t33a_boot.sh" "$T/repo/t33a_boot.sh" && pass "start.sh: 부팅 폴더 없을 때 만들고 설치" || fail "start.sh mkdir 배선"
+H="$T/home4"; rm -rf "$H"; mkdir -p "$H"
+blk=$(sed -n '/^# \[3.5\] boot.sh 즉시 활성화/,/^# \[3.7\]/p' "$ROOT/scripts/t33a_update.sh" | sed "s#/sdcard/Download#$T/dl#g")
+( export PATH="$T/pbin:$PATH" T33A_REPO_SCRIPTS="$T/repo"; . "$LIB"; HOME="$H"; REPO="$T/urepo"; CHANGED_SCRIPTS=1; log() { :; }; eval "$blk" ) 2>/dev/null
+cmp -s "$H/.termux/boot/t33a_boot.sh" "$T/repo/t33a_boot.sh" && pass "update.sh [3.5]: 부팅 폴더 없을 때 만들고 설치" || fail "update.sh [3.5] mkdir 배선"
 
 echo "fails=$fails"; exit $fails
