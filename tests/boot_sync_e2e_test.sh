@@ -17,6 +17,10 @@ cp "$ROOT/scripts/t33a_sync.sh" "$R/t33a_sync.sh"
 : > "$T/dl/t33a_boot.sh"; echo "rep" > "$T/dl/t33a_relay.sh"; echo "old" > "$T/dl/t33a_status.sh"; echo "old" > "$T/dl/T33A_status_wrapper"
 : > "$T/dl/.t33a_relay.sh.sync.99999"; echo "secret" > "$T/dl/.t33a_telegram.conf"
 echo "old-boot" > "$T/home/.termux/boot/t33a_boot.sh"; echo "old-widget" > "$T/home/.shortcuts/T33A-status"
+# 복구 위젯: 다운로드 폴더 래퍼가 0바이트면 설치된 위젯을 덮지 않는다. 부팅·위젯 폴더의 끊긴 교체 임시 파일도 청소 대상
+: > "$T/dl/T33A_wrapper"; echo "old-recover" > "$T/home/.shortcuts/T33A"
+: > "$T/home/.termux/boot/.t33a_boot.sh.sync.4242"; : > "$T/home/.shortcuts/.T33A.sync.4242"; echo other > "$T/home/.shortcuts/HSC"
+BOOT_INODE=$(ls -i "$T/home/.termux/boot/t33a_boot.sh" | awk '{print $1}')
 
 sed -e "s#/sdcard/Download#$T/dl#g" -e "s#/data/local/tmp#$T/tmp#g" \
     -e "s#/data/data/com.termux/files/usr/bin/adb#$T/bin/adb#g" -e "s#/system/bin/#$T/bin/#g" "$SRC" > "$T/boot.sh"
@@ -37,9 +41,12 @@ EOF
 chmod +x "$T/bin/"*
 touch "$T/tmp/t33a.relay_hb"
 
-HOME="$T/home" PATH="$T/bin:$PATH" bash "$T/boot.sh" > "$T/out" 2>&1 & bp=$!
-for i in $(seq 1 300); do kill -0 "$bp" 2>/dev/null || break; command sleep 0.2; done
-kill -0 "$bp" 2>/dev/null && { kill "$bp" 2>/dev/null; fail "60초 안에 끝나지 않음 — 출력: $(tail -3 "$T/out" | tr '\n' '|')"; }
+run_boot() {   # boot.sh 를 띄우고 PID 로만 기다린다(최대 60초)
+  rm -f "$T/ticks"; HOME="$T/home" PATH="$T/bin:$PATH" bash "$T/boot.sh" > "$T/out" 2>&1 & bp=$!
+  for i in $(seq 1 300); do kill -0 "$bp" 2>/dev/null || break; command sleep 0.2; done
+  kill -0 "$bp" 2>/dev/null && { kill "$bp" 2>/dev/null; fail "60초 안에 끝나지 않음 — 출력: $(tail -3 "$T/out" | tr '\n' '|')"; }
+}
+run_boot
 L="$T/dl/t33a_boot.log"
 same() { for f in $FILES; do cmp -s "$R/$f" "$1/$f" || return 1; done; }
 
@@ -50,6 +57,18 @@ same "$T/dl" && pass "틱에서 잘라 놓은 relay 를 다음 틱에 되돌림"
 n=$(grep -c '레포 사본으로 교체' "$L" 2>/dev/null); [ "$n" = 6 ] && pass "교체 로그 6줄(시작 5 + 틱 1) — 로그 초기화 뒤 기록" || fail "교체 로그 ${n}줄"
 [ "$(cat "$T/home/.termux/boot/t33a_boot.sh")" = "repo:t33a_boot.sh" ] && pass "Termux:Boot 사본은 레포 사본에서(0바이트 다운로드 사본 무시)" \
   || fail "Termux:Boot 사본: [$(head -c 40 "$T/home/.termux/boot/t33a_boot.sh")]"
+[ "$(ls -i "$T/home/.termux/boot/t33a_boot.sh" | awk '{print $1}')" != "$BOOT_INODE" ] && pass "부팅 사본 교체는 mv(새 inode — 실행 중인 자기 파일을 제자리에서 덮지 않음)" || fail "부팅 사본 제자리 덮어쓰기"
+[ "$(cat "$T/home/.shortcuts/T33A")" = "old-recover" ] && pass "0바이트 복구 위젯 래퍼가 설치된 T33A 위젯을 덮지 않음" || fail "T33A 위젯: [$(cat "$T/home/.shortcuts/T33A")]"
+[ ! -e "$T/home/.termux/boot/.t33a_boot.sh.sync.4242" ] && [ ! -e "$T/home/.shortcuts/.T33A.sync.4242" ] && [ "$(cat "$T/home/.shortcuts/HSC")" = other ] \
+  && pass "부팅·위젯 폴더의 임시 파일도 청소(남의 위젯 보존)" || fail "부팅·위젯 폴더 청소"
 [ "$(cat "$T/home/.shortcuts/T33A-status")" = "repo:T33A_status_wrapper" ] && pass "상태 위젯은 레포 사본에서" || fail "상태 위젯: [$(cat "$T/home/.shortcuts/T33A-status")]"
 [ ! -e "$T/dl/.t33a_relay.sh.sync.99999" ] && [ "$(cat "$T/dl/.t33a_telegram.conf")" = secret ] && pass "시작 때 임시 파일만 청소(비밀 conf 보존)" || fail "청소"
+[ -x "$T/home/.shortcuts/T33A-status" ] && [ -x "$T/home/.termux/boot/t33a_boot.sh" ] && pass "부팅 사본·상태 위젯 실행 권한" || fail "실행 권한 빠짐"
+
+# 2회차: 레포가 없는 폰(초기 설치 전 등) — 예전 폴백. 0바이트 다운로드 사본이 부팅 사본을 덮지 않고, 맞추기 생략을 기록
+rm -rf "$T/home/t33a-remapper" "$T/dl/"* ; : > "$T/dl/t33a_boot.sh"; echo "rep" > "$T/dl/t33a_relay.sh"; echo "keep-boot" > "$T/home/.termux/boot/t33a_boot.sh"
+run_boot
+[ "$(cat "$T/home/.termux/boot/t33a_boot.sh")" = keep-boot ] && pass "레포 없음: 0바이트 다운로드 사본이 부팅 사본을 덮지 않음(폴백 -s)" || fail "레포 없음 폴백: [$(cat "$T/home/.termux/boot/t33a_boot.sh")]"
+grep -q 't33a_sync.sh 없음 — 다운로드 폴더 사본 맞추기 생략' "$T/dl/t33a_boot.log" && pass "레포 없음: 맞추기 생략을 로그에 남김" || fail "레포 없음 로그 없음"
+[ "$(grep -c '레포 사본으로 교체' "$T/dl/t33a_boot.log")" = 0 ] && pass "레포 없음: 교체 시도 없음" || fail "레포 없음인데 교체 기록"
 echo "fails=$fails"; exit $fails

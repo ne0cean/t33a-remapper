@@ -55,7 +55,10 @@ fi
 # T33A 위젯 설치 — 자기 것(T33A) 1개만. 타 위젯 삭제·"복구" 절대 금지.
 # (2026-07-27 인시던트: 이 자리의 allowlist 정리 루프가 HSC예약·HSC_PWA.sh를 삭제하고
 #  폐기된 hsc_master.py 버전 FINAL_SNIPER를 재생성. 위젯 소유권은 각 프로젝트에 있다)
-if [ -s "$WRAPPER" ]; then
+# 복구 위젯 래퍼는 레포에 없고 다운로드 폴더에만 있다 — 원본은 그대로 두되 설치는 같은 복사기로(0바이트·잘린 복사가 위젯을 덮지 않게)
+if command -v t33a_install >/dev/null 2>&1; then
+    t33a_install "$WRAPPER" "$SHORTCUT_DIR/T33A"
+elif [ -s "$WRAPPER" ]; then
     cp "$WRAPPER" "$SHORTCUT_DIR/T33A" && chmod +x "$SHORTCUT_DIR/T33A"
 fi
 # T33A-상태 위젯 — 읽기 전용 확인용. T33A(복구)와 분리한다:
@@ -70,7 +73,7 @@ echo "$(date): boot started (PID $$)" > "$LOG"
 termux-wake-lock
 echo "$(date): wake lock acquired" >> "$LOG"
 if command -v t33a_sync_dl >/dev/null 2>&1; then
-    t33a_sync_cleanup "$DL_DIR"   # 끊긴 교체가 남긴 임시 파일 — 시작 시점엔 다른 교체가 돌지 않는다
+    t33a_sync_cleanup "$DL_DIR" "$BOOT_DIR" "$SHORTCUT_DIR"   # 끊긴 교체가 남긴 임시 파일 — 시작 시점엔 다른 교체가 돌지 않는다
     sync_scripts                  # 위 줄이 로그를 새로 쓰므로 그 뒤에 부른다(교체 기록이 남도록)
 else
     echo "$(date): $REPO_SCRIPTS/t33a_sync.sh 없음 — 다운로드 폴더 사본 맞추기 생략(레포 확인 필요)" >> "$LOG"

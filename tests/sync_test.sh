@@ -41,12 +41,13 @@ run t33a_install "$T/repo/t33a_status.sh" "$T/dl/t33a_status.sh"; [ $? = 2 ] && 
 for mode in fail trunc; do
   fresh; echo old > "$T/dl/t33a_relay.sh"; mkdir -p "$T/fbin"
   if [ $mode = fail ]; then printf '#!/bin/bash\nexit 1\n' > "$T/fbin/cp"
-  else printf '#!/bin/bash\nhead -c 10 "$1" > "$2"\n' > "$T/fbin/cp"; fi
+  else printf '#!/bin/bash\necho "$2" >> %s/cpdst\nhead -c 10 "$1" > "$2"\n' "$T" > "$T/fbin/cp"; fi
   chmod +x "$T/fbin/cp"
   ( export PATH="$T/fbin:$PATH" T33A_REPO_SCRIPTS="$T/repo"; . "$LIB"; t33a_install "$T/repo/t33a_relay.sh" "$T/dl/t33a_relay.sh"; echo $? > "$T/rc" )
   [ "$(cat "$T/rc")" = 3 ] && [ "$(cat "$T/dl/t33a_relay.sh")" = old ] && [ -z "$(ls -A "$T/dl" | grep sync)" ] \
     && pass "복사 실패($mode) → 반환 3·대상 보존·임시 파일 없음" || fail "복사 실패($mode): rc=$(cat "$T/rc") 대상=$(head -c 20 "$T/dl/t33a_relay.sh") 남은=$(ls -A "$T/dl" | tr '\n' ' ')"
 done
+[ "$(dirname "$(head -1 "$T/cpdst")")" = "$T/dl" ] && pass "임시 파일은 대상과 같은 폴더(mv 가 같은 파일시스템 안 교체)" || fail "임시 파일 위치: $(head -1 "$T/cpdst")"
 ( export T33A_REPO_SCRIPTS="$T/repo"; . "$LIB"
   PATH="$T/fbin:$PATH" t33a_sync_dl "$T/dl" "$T/log"; PATH="$T/fbin:$PATH" t33a_sync_dl "$T/dl" "$T/log"
   t33a_sync_dl "$T/dl" "$T/log"; PATH="$T/fbin:$PATH" t33a_sync_dl "$T/dl" "$T/log" )
@@ -64,11 +65,55 @@ blk=$(sed -n '/^# 레포 사본에서 원자 설치/,/^true$/p' "$ROOT/scripts/t
 [ -n "$blk" ] || fail "start.sh 설치 구간 추출 실패"
 fresh; : > "$T/dl/t33a_boot.sh"; ( HOME="$H"; BOOT_DIR="$H/.termux/boot"; eval "$blk" )
 [ "$(cat "$H/.termux/boot/t33a_boot.sh" 2>/dev/null)" = repo-boot ] && pass "start.sh: 0바이트 다운로드 사본 무시, 레포 사본 설치" || fail "start.sh 설치: [$(cat "$H/.termux/boot/t33a_boot.sh" 2>/dev/null)]"
+rm -rf "$H/t33a-remapper"; echo keep-boot > "$H/.termux/boot/t33a_boot.sh"; ( HOME="$H"; BOOT_DIR="$H/.termux/boot"; eval "$blk" )
+[ "$(cat "$H/.termux/boot/t33a_boot.sh")" = keep-boot ] && pass "start.sh 레포 없음 폴백: 0바이트 다운로드 사본이 부팅 사본을 덮지 않음" || fail "start.sh 폴백: [$(cat "$H/.termux/boot/t33a_boot.sh")]"
 
 # 8. update.sh [3] 구간 실행: 레포 5개를 다운로드 폴더로 맞춤
 blk=$(sed -n '/^# \[3\] 스크립트 변경 시/,/^# \[3.5\]/p' "$ROOT/scripts/t33a_update.sh")
 fresh; cp "$LIB" "$T/repo/t33a_sync.sh"; mkdir -p "$T/urepo"; ln -s "$T/repo" "$T/urepo/scripts"
 ( REPO="$T/urepo"; SCRIPTS_DST="$T/dl"; LOG="$T/log"; CHANGED_SCRIPTS=1; log() { :; }; eval "$blk" )
 same_all && pass "update.sh: 스크립트 5개를 레포와 같게" || fail "update.sh 구간 후 불일치"
+
+# 9. 경고 재무장: 실패 경고 → 성공(교체) → 다시 실패면 경고가 또 남는다(조용히 묻히지 않음)
+fresh; printf '#!/bin/bash\nexit 1\n' > "$T/fbin/cp"; chmod +x "$T/fbin/cp"
+( export T33A_REPO_SCRIPTS="$T/repo"; . "$LIB"
+  PATH="$T/fbin:$PATH" t33a_sync_dl "$T/dl" "$T/log"
+  t33a_sync_dl "$T/dl" "$T/log"; echo stale > "$T/dl/t33a_relay.sh"
+  PATH="$T/fbin:$PATH" t33a_sync_dl "$T/dl" "$T/log" )
+[ "$(grep -c 't33a_relay.sh 맞추기 못함 — 복사 실패' "$T/log")" = 2 ] && pass "성공 뒤 다시 실패하면 경고 재발(재무장)" \
+  || fail "재무장: 경고 $(grep -c 't33a_relay.sh 맞추기 못함' "$T/log")"
+fresh; : > "$T/log"
+( export T33A_REPO_SCRIPTS="$T/repo"; . "$LIB"
+  PATH="$T/fbin:$PATH" t33a_sync_dl "$T/dl" "$T/log"
+  cp "$T/repo/t33a_relay.sh" "$T/dl/t33a_relay.sh"; PATH="$T/fbin:$PATH" t33a_sync_dl "$T/dl" "$T/log"   # 다른 경로로 같아짐 → 반환 0
+  echo stale > "$T/dl/t33a_relay.sh"; PATH="$T/fbin:$PATH" t33a_sync_dl "$T/dl" "$T/log" )
+[ "$(grep -c 't33a_relay.sh 맞추기 못함 — 복사 실패' "$T/log")" = 2 ] && pass "밖에서 같아진 뒤 다시 실패해도 경고 재발" \
+  || fail "같음(0) 재무장: 경고 $(grep -c 't33a_relay.sh 맞추기 못함' "$T/log")"
+fresh; rm "$T/repo/t33a_start.sh"
+( export T33A_REPO_SCRIPTS="$T/repo"; . "$LIB"; t33a_sync_dl "$T/dl" "$T/log"
+  echo "repo:t33a_start.sh" > "$T/repo/t33a_start.sh"; t33a_sync_dl "$T/dl" "$T/log"
+  rm "$T/repo/t33a_start.sh"; t33a_sync_dl "$T/dl" "$T/log" )
+[ "$(grep -c 't33a_start.sh 맞추기 못함 — 레포 사본 없음' "$T/log")" = 2 ] && pass "레포 사본 없음 경고도 재무장" \
+  || fail "레포 없음 재무장: $(grep -c 't33a_start.sh 맞추기 못함' "$T/log")"
+
+# 10. 내용이 같아도 실행 권한이 빠져 있으면 채운다(앞선 chmod 실패·kill 뒤 644 고착 방지)
+fresh; cp "$T/repo/t33a_relay.sh" "$T/dl/t33a_relay.sh"; chmod 644 "$T/dl/t33a_relay.sh"
+run t33a_install "$T/repo/t33a_relay.sh" "$T/dl/t33a_relay.sh"; rc=$?
+[ $rc = 0 ] && [ -x "$T/dl/t33a_relay.sh" ] && pass "같은 내용·644 → 반환 0 + 실행 권한 복원" || fail "644 고착: rc=$rc"
+
+# 11. 청소는 넘긴 폴더 모두(다운로드·부팅·위젯 폴더)
+for d in a b c; do mkdir -p "$T/c$d"; : > "$T/c$d/.t33a_boot.sh.sync.7"; : > "$T/c$d/.T33A.sync.8"; : > "$T/c$d/keep"; done
+run t33a_sync_cleanup "$T/ca" "$T/cb" "$T/cc"
+[ "$(ls -A "$T/ca" "$T/cb" "$T/cc" | grep -c sync)" = 0 ] && [ "$(ls "$T"/c?/keep | wc -l | tr -d ' ')" = 3 ] && pass "청소는 넘긴 세 폴더 모두" || fail "다중 폴더 청소"
+
+# 12. update.sh [3.5] 구간 실행: 부팅 사본을 레포 사본으로 원자 교체(새 inode). 프로세스 명령은 가짜(아무것도 죽이지 않음)
+blk=$(sed -n '/^# \[3.5\] boot.sh 즉시 활성화/,/^# \[3.7\]/p' "$ROOT/scripts/t33a_update.sh" | sed "s#/sdcard/Download#$T/dl#g")
+[ -n "$blk" ] || fail "update.sh [3.5] 추출 실패"
+fresh; H="$T/uhome"; rm -rf "$H"; mkdir -p "$H/.termux/boot" "$T/pbin"; echo old-boot > "$H/.termux/boot/t33a_boot.sh"
+for c in pgrep pkill nohup sleep; do printf '#!/bin/bash\nexit 0\n' > "$T/pbin/$c"; done; chmod +x "$T/pbin/"*
+i=$(inode "$H/.termux/boot/t33a_boot.sh")
+( export PATH="$T/pbin:$PATH" T33A_REPO_SCRIPTS="$T/repo"; . "$LIB"; HOME="$H"; REPO="$T/urepo"; CHANGED_SCRIPTS=1; log() { :; }; eval "$blk" ) 2>/dev/null
+cmp -s "$H/.termux/boot/t33a_boot.sh" "$T/repo/t33a_boot.sh" && [ "$(inode "$H/.termux/boot/t33a_boot.sh")" != "$i" ] && [ -x "$H/.termux/boot/t33a_boot.sh" ] \
+  && pass "update.sh [3.5]: 부팅 사본을 레포 사본으로 원자 교체" || fail "update.sh [3.5]: [$(head -c 20 "$H/.termux/boot/t33a_boot.sh")]"
 
 echo "fails=$fails"; exit $fails

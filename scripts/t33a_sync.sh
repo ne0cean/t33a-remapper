@@ -9,14 +9,20 @@
 T33A_REPO_SCRIPTS="${T33A_REPO_SCRIPTS:-$HOME/t33a-remapper/scripts}"
 T33A_DL_FILES="t33a_boot.sh t33a_relay.sh t33a_start.sh t33a_status.sh T33A_status_wrapper"
 
+_t33a_exec() { case "$1" in *.sh|*/T33A|*/T33A-status) return 0 ;; esac; return 1; }   # 실행 권한이 필요한 대상
+
 # t33a_install <원본> <대상> → 0: 같음(손 안 댐) · 1: 교체함 · 2: 원본 없음/0바이트 · 3: 복사 실패(대상은 그대로)
 t33a_install() {
     local src="$1" dst="$2" tmp
     [ -s "$src" ] || return 2
-    cmp -s "$src" "$dst" 2>/dev/null && return 0
+    if cmp -s "$src" "$dst" 2>/dev/null; then
+        # 내용이 같아도 실행 권한은 확인 — 앞선 chmod 실패·mv 와 chmod 사이 kill 로 644 에 머무르지 않게
+        _t33a_exec "$dst" && [ ! -x "$dst" ] && chmod +x "$dst" 2>/dev/null
+        return 0
+    fi
     tmp="$(dirname "$dst")/.$(basename "$dst").sync.$$"
     if cp "$src" "$tmp" 2>/dev/null && cmp -s "$src" "$tmp" && mv -f "$tmp" "$dst" 2>/dev/null; then
-        case "$dst" in *.sh|*/T33A|*/T33A-status) chmod +x "$dst" 2>/dev/null ;; esac
+        _t33a_exec "$dst" && chmod +x "$dst" 2>/dev/null
         return 1
     fi
     rm -f "$tmp" 2>/dev/null
@@ -43,5 +49,9 @@ t33a_sync_dl() {
     done
 }
 
-# t33a_sync_cleanup <폴더> — 끊긴 교체가 남긴 임시 파일 청소(시작 때 한 번, 다른 교체가 돌지 않을 때)
-t33a_sync_cleanup() { rm -f "$1"/.t33a_*.sync.* "$1"/.T33A_*.sync.* "$1"/.T33A.sync.* "$1"/.T33A-status.sync.* 2>/dev/null; }
+# t33a_sync_cleanup <폴더>... — 끊긴 교체가 남긴 임시 파일 청소(시작 때 한 번, 다른 교체가 돌지 않을 때).
+# 다운로드 폴더·~/.termux/boot·~/.shortcuts 모두 t33a_install 의 대상이라 셋 다 넘긴다. 이름이 우리 것(.t33a_*·.T33A*)인 .sync. 만 지운다.
+t33a_sync_cleanup() {
+    local d
+    for d in "$@"; do rm -f "$d"/.t33a_*.sync.* "$d"/.T33A_*.sync.* "$d"/.T33A.sync.* "$d"/.T33A-status.sync.* 2>/dev/null; done
+}
