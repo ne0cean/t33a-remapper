@@ -76,4 +76,6 @@ m "start: 폴백 -s→-f"               scripts/t33a_start.sh 'elif [ -s /sdcard
 m "start: 부팅 사본 제자리 cp"       scripts/t33a_start.sh 't33a_install "$HOME/t33a-remapper/scripts/t33a_boot.sh" "$BOOT_DIR/t33a_boot.sh"' 'cp "$HOME/t33a-remapper/scripts/t33a_boot.sh" "$BOOT_DIR/t33a_boot.sh"'
 m "setup: 부팅 사본 제자리 cp"       scripts/t33a_setup_phone.sh 't33a_install "$REPO/scripts/t33a_boot.sh" "$BOOT_DIR/t33a_boot.sh"' 'cp "$REPO/scripts/t33a_boot.sh" "$BOOT_DIR/t33a_boot.sh"'
 m "setup: 다운로드 맞추기 제거"      scripts/t33a_setup_phone.sh 't33a_sync_dl /sdcard/Download /sdcard/Download/t33a_boot.log' ':'
+m "sync: set -e 보호 제거(rc=\$?)"   $S 'rc=0; t33a_install "$T33A_REPO_SCRIPTS/$f" "$dl/$f" || rc=$?' 't33a_install "$T33A_REPO_SCRIPTS/$f" "$dl/$f"; rc=$?'
+m "setup: 단독 호출 || : 제거"       scripts/t33a_setup_phone.sh '"$BOOT_DIR/t33a_boot.sh" || :' '"$BOOT_DIR/t33a_boot.sh"'
 echo "변이 $total 종 중 생존·무효 $survived"; [ $survived = 0 ]

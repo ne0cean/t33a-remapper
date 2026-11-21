@@ -88,7 +88,7 @@ rm -rf "$T/dl/"* "$T/snapS"; : > "$T/dl/t33a_relay.sh"; echo "rep" > "$T/dl/t33a
 rm -f "$T/tmp/t33a.relay_hb" "$T/tmp/t33a.heartbeat"; : > "$T/adb_ok"
 echo "new-recover" > "$T/dl/T33A_wrapper"; chmod 644 "$T/dl/T33A_wrapper"   # 복구 위젯 정상 설치 경로
 run_boot
-grep -q 'starting relay via ADB' "$T/dl/t33a_boot.log" && pass "3회차가 relay 기동 경로를 탐(hb 없음 → start_relay)" || fail "3회차: relay 기동 경로 미진입 — $(tail -3 "$T/dl/t33a_boot.log" | tr '\n' '|')"
+grep -q 'starting relay via ADB' "$T/dl/t33a_boot.log" && pass "3회차가 relay 기동 시도 로그를 남김(진입 증거는 아래 setsid 스냅샷)" || fail "3회차: relay 기동 경로 미진입 — $(tail -3 "$T/dl/t33a_boot.log" | tr '\n' '|')"
 [ -e "$T/snapS/.taken" ] && same "$T/snapS" && pass "relay 를 띄우는 순간 5개 사본이 레포와 같음(재부팅 사고 경로)" \
   || fail "relay 기동 시점 사본: $(for f in $FILES; do printf '%s=[%s] ' $f "$(head -c 12 "$T/snapS/$f" 2>/dev/null)"; done)"
 [ "$(cat "$T/home/.shortcuts/T33A")" = new-recover ] && [ -x "$T/home/.shortcuts/T33A" ] && pass "복구 위젯: 내용 있는 래퍼면 설치 + 실행 권한" || fail "복구 위젯 설치: [$(cat "$T/home/.shortcuts/T33A")]"

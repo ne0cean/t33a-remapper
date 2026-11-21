@@ -73,7 +73,7 @@ echo "$(date): boot started (PID $$)" > "$LOG"
 termux-wake-lock
 echo "$(date): wake lock acquired" >> "$LOG"
 if command -v t33a_sync_dl >/dev/null 2>&1; then
-    t33a_sync_cleanup "$DL_DIR" "$BOOT_DIR" "$SHORTCUT_DIR"   # 끊긴 교체가 남긴 임시 파일 — 시작 시점엔 다른 교체가 돌지 않는다
+    t33a_sync_cleanup "$DL_DIR" "$BOOT_DIR" "$SHORTCUT_DIR"   # 끊긴 교체가 남긴 임시 파일(1분 넘은 것만 — 동시 교체 중인 것은 보호)
     sync_scripts                  # 위 줄이 로그를 새로 쓰므로 그 뒤에 부른다(교체 기록이 남도록)
 else
     echo "$(date): $REPO_SCRIPTS/t33a_sync.sh 없음 — 다운로드 폴더 사본 맞추기 생략(레포 확인 필요)" >> "$LOG"

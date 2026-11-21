@@ -126,7 +126,11 @@ fresh; H="$T/shome"; rm -rf "$H"; mkdir -p "$H/.termux/boot"; echo old-boot > "$
 cp "$LIB" "$T/repo/t33a_sync.sh"
 blk=$( { sed -n '/^# boot.sh를 Termux:Boot에 등록/,/Termux:Boot 등록 완료"/p' "$ROOT/scripts/t33a_setup_phone.sh"; grep '^t33a_sync_dl /sdcard/Download' "$ROOT/scripts/t33a_setup_phone.sh"; } | sed "s#/sdcard/Download#$T/dl#g")
 [ "$(printf '%s\n' "$blk" | grep -c 't33a_')" -ge 3 ] || fail "setup_phone.sh 구간 추출 실패"
-( REPO="$T/urepo"; BOOT_DIR="$H/.termux/boot"; eval "$blk" ) > /dev/null
+# setup_phone.sh 는 9행이 set -e — 원본처럼 set -e 아래에서 돌리고, 교체가 일어나는 첫 설치가 구간 끝까지 가는지 본다
+grep -q '^set -e' "$ROOT/scripts/t33a_setup_phone.sh" || fail "setup_phone.sh 의 set -e 가 사라짐(시험 전제 확인)"
+( set -e; REPO="$T/urepo"; BOOT_DIR="$H/.termux/boot"; eval "$blk"; echo REACHED_END ) > "$T/setup_out" 2>&1
+grep -q REACHED_END "$T/setup_out" && grep -q 'Termux:Boot 등록 완료' "$T/setup_out" && pass "setup_phone.sh: set -e 아래 첫 설치(교체 발생)가 끝까지 감" \
+  || fail "setup_phone.sh: set -e 에서 중간 종료 — 출력[$(tr '\n' '|' < "$T/setup_out")]"
 same_all && cmp -s "$H/.termux/boot/t33a_boot.sh" "$T/repo/t33a_boot.sh" && [ "$(inode "$H/.termux/boot/t33a_boot.sh")" != "$i" ] \
   && pass "setup_phone.sh: 다운로드 5개·부팅 사본을 레포와 같게(원자 교체)" || fail "setup_phone.sh 구간 후 불일치"
 

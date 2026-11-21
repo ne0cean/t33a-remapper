@@ -12,6 +12,7 @@ T33A_DL_FILES="t33a_boot.sh t33a_relay.sh t33a_start.sh t33a_status.sh T33A_stat
 _t33a_exec() { case "$1" in *.sh|*/T33A|*/T33A-status) return 0 ;; esac; return 1; }   # 실행 권한이 필요한 대상
 
 # t33a_install <원본> <대상> → 0: 같음(손 안 댐) · 1: 교체함 · 2: 원본 없음/0바이트 · 3: 복사 실패(대상은 그대로)
+# 주의: 성공(교체)도 0 이 아니다 — set -e 인 곳에서 단독으로 부르면 거기서 끝난다. 반환을 볼 게 아니면 `|| :` 로 부를 것.
 t33a_install() {
     local src="$1" dst="$2" tmp
     [ -s "$src" ] || return 2
@@ -34,7 +35,7 @@ _T33A_SYNC_WARNED=" "
 t33a_sync_dl() {
     local dl="$1" log="$2" f rc key
     for f in $T33A_DL_FILES; do
-        t33a_install "$T33A_REPO_SCRIPTS/$f" "$dl/$f"; rc=$?
+        rc=0; t33a_install "$T33A_REPO_SCRIPTS/$f" "$dl/$f" || rc=$?   # || 로 받아야 set -e 인 호출부(setup_phone.sh)가 "교체함(1)"에서 끊기지 않는다
         key="$f:$rc"
         case $rc in
             0) _T33A_SYNC_WARNED="${_T33A_SYNC_WARNED/ $f:2 / }"; _T33A_SYNC_WARNED="${_T33A_SYNC_WARNED/ $f:3 / }" ;;
