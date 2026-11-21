@@ -67,25 +67,28 @@ restore_missing_scripts() {
 
 # ── 자체 설치/업데이트 ─────────────────────────────────────────
 mkdir -p "$BOOT_DIR" "$SHORTCUT_DIR" 2>/dev/null
-[ -f "$SRC" ] && cp "$SRC" "$BOOT_DIR/t33a_boot.sh" && chmod +x "$BOOT_DIR/t33a_boot.sh"
+# -s: 0바이트 사본이 Termux:Boot 사본을 덮으면 다음 부팅부터 아무것도 안 뜬다(격리 레인 L-SR-2) — 위젯 설치도 같은 기준
+[ -s "$SRC" ] && cp "$SRC" "$BOOT_DIR/t33a_boot.sh" && chmod +x "$BOOT_DIR/t33a_boot.sh"
 # 바이너리 복사는 relay(shell 유저)가 담당 — Termux 유저가 직접 하면 "text file busy"
 # BIN_SRC가 있으면 relay가 다음 watchdog 사이클에 자동 교체
 [ -f "$RELAY_SCRIPT" ] && chmod +x "$RELAY_SCRIPT"
 # T33A 위젯 설치 — 자기 것(T33A) 1개만. 타 위젯 삭제·"복구" 절대 금지.
 # (2026-07-27 인시던트: 이 자리의 allowlist 정리 루프가 HSC예약·HSC_PWA.sh를 삭제하고
 #  폐기된 hsc_master.py 버전 FINAL_SNIPER를 재생성. 위젯 소유권은 각 프로젝트에 있다)
-if [ -f "$WRAPPER" ]; then
+if [ -s "$WRAPPER" ]; then
     cp "$WRAPPER" "$SHORTCUT_DIR/T33A" && chmod +x "$SHORTCUT_DIR/T33A"
 fi
 # T33A-상태 위젯 — 읽기 전용 확인용. T33A(복구)와 분리한다:
 # 살아있나 보려고 복구 위젯을 누르면 멀쩡한 watchdog을 kill·재기동하게 된다.
-if [ -f "$STATUS_WRAPPER" ]; then
+if [ -s "$STATUS_WRAPPER" ]; then
     cp "$STATUS_WRAPPER" "$SHORTCUT_DIR/T33A-status" && chmod +x "$SHORTCUT_DIR/T33A-status"
 fi
 
 echo "$(date): boot started (PID $$)" > "$LOG"
 termux-wake-lock
 echo "$(date): wake lock acquired" >> "$LOG"
+# 복사 도중 kill·재부팅으로 남은 임시 파일 청소 — 시작 시점엔 다른 복구가 돌지 않는다(격리 레인 L-SR-5)
+rm -f "$DL_DIR"/.t33a_*.restore.* "$DL_DIR"/.T33A_*.restore.* 2>/dev/null
 restore_missing_scripts   # 위 줄이 로그를 새로 쓰므로 그 뒤에 부른다(복구 기록이 남도록)
 
 # ── auto_pull 백그라운드 시작 (GitHub 변경 감지 → 자동 업데이트) ────────

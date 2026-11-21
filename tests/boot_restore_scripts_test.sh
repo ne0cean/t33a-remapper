@@ -1,7 +1,10 @@
 #!/bin/bash
 # boot_restore_scripts_test.sh — 폰 t33a_boot.sh 의 다운로드 폴더 사본 되살리기 시험(2026-11-21).
 # 사용: bash tests/boot_restore_scripts_test.sh [스크립트]. 폰·adb 는 부르지 않는다(임시 폴더로만).
-SRC="${1:-$(cd "$(dirname "$0")/.." && pwd)/scripts/t33a_boot.sh}"; T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+SRC="${1:-$(cd "$(dirname "$0")/.." && pwd)/scripts/t33a_boot.sh}"
+# T 가 비면 아래 "$T/bin/cp"·rm -rf 가 /bin 을 겨눈다 — 만들기 실패면 아무것도 하지 않고 끝낸다(격리 레인 L-SR-1)
+T=$(mktemp -d) && [ -n "$T" ] && [ -d "$T" ] || { echo "ABORT: 임시 폴더 생성 실패"; exit 2; }
+trap 'rm -rf "$T"' EXIT
 fn=$(sed -n '/^restore_missing_scripts() {/,/^}/p' "$SRC")
 [ -n "$fn" ] || { echo "ABORT: restore_missing_scripts 추출 실패 ($SRC)"; exit 2; }
 fails=0

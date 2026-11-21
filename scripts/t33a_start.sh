@@ -13,7 +13,7 @@ STATUS_FILE=/data/local/tmp/t33a.status
 ADB=/data/data/com.termux/files/usr/bin/adb
 BOOT_DIR="$HOME/.termux/boot"
 # boot.sh 자동 설치 — start.sh가 Termux 유저로 실행되므로 ~/.termux/boot/ 접근 가능
-[ -f /sdcard/Download/t33a_boot.sh ] && mkdir -p "$BOOT_DIR" && \
+[ -s /sdcard/Download/t33a_boot.sh ] && mkdir -p "$BOOT_DIR" && \
     cp /sdcard/Download/t33a_boot.sh "$BOOT_DIR/t33a_boot.sh" && \
     chmod +x "$BOOT_DIR/t33a_boot.sh" 2>/dev/null || true
 
