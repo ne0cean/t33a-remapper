@@ -15,11 +15,13 @@ for f in $FILES; do echo "repo:$f" > "$R/$f"; done
 cp "$ROOT/scripts/t33a_sync.sh" "$R/t33a_sync.sh"
 # 시작 상태: boot 0바이트·relay 잘림·status 옛 버전·start 없음, 끊긴 교체 임시 파일, 옛 부팅 사본·옛 상태 위젯
 : > "$T/dl/t33a_boot.sh"; echo "rep" > "$T/dl/t33a_relay.sh"; echo "old" > "$T/dl/t33a_status.sh"; echo "old" > "$T/dl/T33A_status_wrapper"
-: > "$T/dl/.t33a_relay.sh.sync.99999"; echo "secret" > "$T/dl/.t33a_telegram.conf"
+: > "$T/dl/.t33a_relay.sh.sync.99999"; echo "secret" > "$T/dl/.t33a_telegram.conf"; touch -t 202001010000 "$T/dl/.t33a_relay.sh.sync.99999"   # 1분 넘은 잔해
 echo "old-boot" > "$T/home/.termux/boot/t33a_boot.sh"; echo "old-widget" > "$T/home/.shortcuts/T33A-status"
 # 복구 위젯: 다운로드 폴더 래퍼가 0바이트면 설치된 위젯을 덮지 않는다. 부팅·위젯 폴더의 끊긴 교체 임시 파일도 청소 대상
 : > "$T/dl/T33A_wrapper"; echo "old-recover" > "$T/home/.shortcuts/T33A"
 : > "$T/home/.termux/boot/.t33a_boot.sh.sync.4242"; : > "$T/home/.shortcuts/.T33A.sync.4242"; echo other > "$T/home/.shortcuts/HSC"
+: > "$T/home/.shortcuts/.HSC.sync.1"   # 남의 숨김 임시 파일 — 우리 이름이 아니니 보존
+touch -t 202001010000 "$T/home/.termux/boot/.t33a_boot.sh.sync.4242" "$T/home/.shortcuts/.T33A.sync.4242" "$T/home/.shortcuts/.HSC.sync.1"
 BOOT_INODE=$(ls -i "$T/home/.termux/boot/t33a_boot.sh" | awk '{print $1}')
 
 sed -e "s#/sdcard/Download#$T/dl#g" -e "s#/data/local/tmp#$T/tmp#g" \
@@ -27,7 +29,15 @@ sed -e "s#/sdcard/Download#$T/dl#g" -e "s#/data/local/tmp#$T/tmp#g" \
 for c in termux-wake-lock termux-notification termux-notification-remove termux-toast curl am settings svc cmd pkill; do
   printf '#!/bin/bash\nexit 0\n' > "$T/bin/$c"
 done
-printf '#!/bin/bash\n[ -e "%s/snap0/.taken" ] || { cp -p "%s/dl/"* "%s/snap0/" 2>/dev/null; : > "%s/snap0/.taken"; }\nexit 1\n' "$T" "$T" "$T" "$T" > "$T/bin/adb"; printf '#!/bin/bash\nexit 1\n' > "$T/bin/pgrep"
+# adb 가짜: 첫 호출 때 snap0, relay 기동 명령(setsid) 때 snapS 에 다운로드 폴더를 찍는다. $T/adb_ok 가 있으면 성공(루프백 연결됨)
+cat > "$T/bin/adb" <<EOF
+#!/bin/bash
+[ -e "$T/snap0/.taken" ] || { cp -p "$T/dl/"* "$T/snap0/" 2>/dev/null; : > "$T/snap0/.taken"; }
+case "\$*" in *setsid*) [ -e "$T/snapS/.taken" ] || { mkdir -p "$T/snapS"; cp -p "$T/dl/"* "$T/snapS/" 2>/dev/null; : > "$T/snapS/.taken"; } ;; esac
+[ -e "$T/adb_ok" ] && exit 0
+exit 1
+EOF
+printf '#!/bin/bash\nexit 1\n' > "$T/bin/pgrep"
 printf '#!/bin/bash\n[ "$1" = service.adb.tcp.port ] && echo 5555\nexit 0\n' > "$T/bin/getprop"
 printf '#!/bin/bash\n[ "$1" = -c ] && { [ -e "$3" ] && date +%%s || exit 1; exit 0; }\nexec /usr/bin/stat "$@"\n' > "$T/bin/stat"
 cat > "$T/bin/sleep" <<EOF
@@ -59,7 +69,7 @@ n=$(grep -c '레포 사본으로 교체' "$L" 2>/dev/null); [ "$n" = 6 ] && pass
   || fail "Termux:Boot 사본: [$(head -c 40 "$T/home/.termux/boot/t33a_boot.sh")]"
 [ "$(ls -i "$T/home/.termux/boot/t33a_boot.sh" | awk '{print $1}')" != "$BOOT_INODE" ] && pass "부팅 사본 교체는 mv(새 inode — 실행 중인 자기 파일을 제자리에서 덮지 않음)" || fail "부팅 사본 제자리 덮어쓰기"
 [ "$(cat "$T/home/.shortcuts/T33A")" = "old-recover" ] && pass "0바이트 복구 위젯 래퍼가 설치된 T33A 위젯을 덮지 않음" || fail "T33A 위젯: [$(cat "$T/home/.shortcuts/T33A")]"
-[ ! -e "$T/home/.termux/boot/.t33a_boot.sh.sync.4242" ] && [ ! -e "$T/home/.shortcuts/.T33A.sync.4242" ] && [ "$(cat "$T/home/.shortcuts/HSC")" = other ] \
+[ ! -e "$T/home/.termux/boot/.t33a_boot.sh.sync.4242" ] && [ ! -e "$T/home/.shortcuts/.T33A.sync.4242" ] && [ "$(cat "$T/home/.shortcuts/HSC")" = other ] && [ -e "$T/home/.shortcuts/.HSC.sync.1" ] \
   && pass "부팅·위젯 폴더의 임시 파일도 청소(남의 위젯 보존)" || fail "부팅·위젯 폴더 청소"
 [ "$(cat "$T/home/.shortcuts/T33A-status")" = "repo:T33A_status_wrapper" ] && pass "상태 위젯은 레포 사본에서" || fail "상태 위젯: [$(cat "$T/home/.shortcuts/T33A-status")]"
 [ ! -e "$T/dl/.t33a_relay.sh.sync.99999" ] && [ "$(cat "$T/dl/.t33a_telegram.conf")" = secret ] && pass "시작 때 임시 파일만 청소(비밀 conf 보존)" || fail "청소"
@@ -71,4 +81,15 @@ run_boot
 [ "$(cat "$T/home/.termux/boot/t33a_boot.sh")" = keep-boot ] && pass "레포 없음: 0바이트 다운로드 사본이 부팅 사본을 덮지 않음(폴백 -s)" || fail "레포 없음 폴백: [$(cat "$T/home/.termux/boot/t33a_boot.sh")]"
 grep -q 't33a_sync.sh 없음 — 다운로드 폴더 사본 맞추기 생략' "$T/dl/t33a_boot.log" && pass "레포 없음: 맞추기 생략을 로그에 남김" || fail "레포 없음 로그 없음"
 [ "$(grep -c '레포 사본으로 교체' "$T/dl/t33a_boot.log")" = 0 ] && pass "레포 없음: 교체 시도 없음" || fail "레포 없음인데 교체 기록"
+
+# 3회차: 재부팅 사고 경로 — relay 죽음(hb 없음) → 루프백 연결 → start_relay. relay 를 띄우는 그 순간 사본이 이미 레포와 같아야 한다
+mkdir -p "$R"; for f in $FILES; do echo "repo:$f" > "$R/$f"; done; cp "$ROOT/scripts/t33a_sync.sh" "$R/t33a_sync.sh"
+rm -rf "$T/dl/"* "$T/snapS"; : > "$T/dl/t33a_relay.sh"; echo "rep" > "$T/dl/t33a_boot.sh"
+rm -f "$T/tmp/t33a.relay_hb" "$T/tmp/t33a.heartbeat"; : > "$T/adb_ok"
+echo "new-recover" > "$T/dl/T33A_wrapper"; chmod 644 "$T/dl/T33A_wrapper"   # 복구 위젯 정상 설치 경로
+run_boot
+grep -q 'starting relay via ADB' "$T/dl/t33a_boot.log" && pass "3회차가 relay 기동 경로를 탐(hb 없음 → start_relay)" || fail "3회차: relay 기동 경로 미진입 — $(tail -3 "$T/dl/t33a_boot.log" | tr '\n' '|')"
+[ -e "$T/snapS/.taken" ] && same "$T/snapS" && pass "relay 를 띄우는 순간 5개 사본이 레포와 같음(재부팅 사고 경로)" \
+  || fail "relay 기동 시점 사본: $(for f in $FILES; do printf '%s=[%s] ' $f "$(head -c 12 "$T/snapS/$f" 2>/dev/null)"; done)"
+[ "$(cat "$T/home/.shortcuts/T33A")" = new-recover ] && [ -x "$T/home/.shortcuts/T33A" ] && pass "복구 위젯: 내용 있는 래퍼면 설치 + 실행 권한" || fail "복구 위젯 설치: [$(cat "$T/home/.shortcuts/T33A")]"
 echo "fails=$fails"; exit $fails

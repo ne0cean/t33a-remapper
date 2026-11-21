@@ -51,7 +51,13 @@ t33a_sync_dl() {
 
 # t33a_sync_cleanup <폴더>... — 끊긴 교체가 남긴 임시 파일 청소(시작 때 한 번, 다른 교체가 돌지 않을 때).
 # 다운로드 폴더·~/.termux/boot·~/.shortcuts 모두 t33a_install 의 대상이라 셋 다 넘긴다. 이름이 우리 것(.t33a_*·.T33A*)인 .sync. 만 지운다.
+# 1분 넘은 것만 지운다 — 같은 순간 update.sh·start.sh 가 교체 중인 임시 파일(수 ms 수명)을 건드리지 않게.
+# (지워 버려도 그쪽 t33a_install 이 cmp/mv 실패로 반환 3 → 다음 틱에 다시 맞추지만, 처음부터 피한다)
 t33a_sync_cleanup() {
     local d
-    for d in "$@"; do rm -f "$d"/.t33a_*.sync.* "$d"/.T33A_*.sync.* "$d"/.T33A.sync.* "$d"/.T33A-status.sync.* 2>/dev/null; done
+    for d in "$@"; do
+        [ -d "$d" ] || continue
+        find "$d" -maxdepth 1 -type f \( -name '.t33a_*.sync.*' -o -name '.T33A_*.sync.*' -o -name '.T33A.sync.*' -o -name '.T33A-status.sync.*' \) \
+            -mmin +1 -exec rm -f {} + 2>/dev/null
+    done
 }

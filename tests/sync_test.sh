@@ -56,15 +56,18 @@ done
 
 # 6. 청소: .sync. 임시 파일만 지우고 비밀 conf·상태 파일은 보존
 fresh; for x in .t33a_relay.sh.sync.1 .T33A_status_wrapper.sync.2 .T33A-status.sync.3 .t33a_telegram.conf .t33a_remote_state t33a_relay.sh; do : > "$T/dl/$x"; done
+touch -t 202001010000 "$T/dl/".*.sync.* "$T/dl/.t33a_telegram.conf"; : > "$T/dl/.t33a_start.sh.sync.5"   # 마지막 것은 방금 생긴(교체 중인) 임시 파일
 run t33a_sync_cleanup "$T/dl"
-[ "$(ls -A "$T/dl" | tr '\n' ' ')" = ".t33a_remote_state .t33a_telegram.conf t33a_relay.sh " ] && pass "청소는 .sync. 임시 파일만" || fail "청소 후: $(ls -A "$T/dl" | tr '\n' ' ')"
+[ "$(ls -A "$T/dl" | tr '\n' ' ')" = ".t33a_remote_state .t33a_start.sh.sync.5 .t33a_telegram.conf t33a_relay.sh " ] && pass "청소는 1분 넘은 우리 .sync. 임시 파일만(교체 중인 새 임시 파일·비밀 conf 보존)" || fail "청소 후: $(ls -A "$T/dl" | tr '\n' ' ')"
 
 # 7. start.sh 설치 구간 실행: 다운로드 폴더 boot.sh 가 0바이트여도 레포 사본으로 설치
 H="$T/home"; rm -rf "$H"; mkdir -p "$H/t33a-remapper/scripts"; cp "$LIB" "$H/t33a-remapper/scripts/t33a_sync.sh"; echo "repo-boot" > "$H/t33a-remapper/scripts/t33a_boot.sh"
 blk=$(sed -n '/^# 레포 사본에서 원자 설치/,/^true$/p' "$ROOT/scripts/t33a_start.sh" | sed "s#/sdcard/Download#$T/dl#g")
 [ -n "$blk" ] || fail "start.sh 설치 구간 추출 실패"
-fresh; : > "$T/dl/t33a_boot.sh"; ( HOME="$H"; BOOT_DIR="$H/.termux/boot"; eval "$blk" )
+fresh; : > "$T/dl/t33a_boot.sh"; mkdir -p "$H/.termux/boot"; echo old-boot > "$H/.termux/boot/t33a_boot.sh"; i=$(inode "$H/.termux/boot/t33a_boot.sh")
+( HOME="$H"; BOOT_DIR="$H/.termux/boot"; eval "$blk" )
 [ "$(cat "$H/.termux/boot/t33a_boot.sh" 2>/dev/null)" = repo-boot ] && pass "start.sh: 0바이트 다운로드 사본 무시, 레포 사본 설치" || fail "start.sh 설치: [$(cat "$H/.termux/boot/t33a_boot.sh" 2>/dev/null)]"
+[ "$(inode "$H/.termux/boot/t33a_boot.sh")" != "$i" ] && [ -x "$H/.termux/boot/t33a_boot.sh" ] && pass "start.sh: 부팅 사본 원자 교체(새 inode)·실행 권한" || fail "start.sh: 제자리 덮어쓰기"
 rm -rf "$H/t33a-remapper"; echo keep-boot > "$H/.termux/boot/t33a_boot.sh"; ( HOME="$H"; BOOT_DIR="$H/.termux/boot"; eval "$blk" )
 [ "$(cat "$H/.termux/boot/t33a_boot.sh")" = keep-boot ] && pass "start.sh 레포 없음 폴백: 0바이트 다운로드 사본이 부팅 사본을 덮지 않음" || fail "start.sh 폴백: [$(cat "$H/.termux/boot/t33a_boot.sh")]"
 
@@ -103,6 +106,7 @@ run t33a_install "$T/repo/t33a_relay.sh" "$T/dl/t33a_relay.sh"; rc=$?
 
 # 11. 청소는 넘긴 폴더 모두(다운로드·부팅·위젯 폴더)
 for d in a b c; do mkdir -p "$T/c$d"; : > "$T/c$d/.t33a_boot.sh.sync.7"; : > "$T/c$d/.T33A.sync.8"; : > "$T/c$d/keep"; done
+touch -t 202001010000 "$T"/c?/.*.sync.*
 run t33a_sync_cleanup "$T/ca" "$T/cb" "$T/cc"
 [ "$(ls -A "$T/ca" "$T/cb" "$T/cc" | grep -c sync)" = 0 ] && [ "$(ls "$T"/c?/keep | wc -l | tr -d ' ')" = 3 ] && pass "청소는 넘긴 세 폴더 모두" || fail "다중 폴더 청소"
 
@@ -111,9 +115,19 @@ blk=$(sed -n '/^# \[3.5\] boot.sh 즉시 활성화/,/^# \[3.7\]/p' "$ROOT/script
 [ -n "$blk" ] || fail "update.sh [3.5] 추출 실패"
 fresh; H="$T/uhome"; rm -rf "$H"; mkdir -p "$H/.termux/boot" "$T/pbin"; echo old-boot > "$H/.termux/boot/t33a_boot.sh"
 for c in pgrep pkill nohup sleep; do printf '#!/bin/bash\nexit 0\n' > "$T/pbin/$c"; done; chmod +x "$T/pbin/"*
+for c in pgrep pkill nohup; do [ "$(PATH="$T/pbin:$PATH" command -v $c)" = "$T/pbin/$c" ] || { echo "ABORT: 가짜 $c 가 잡히지 않음 — 실제 프로세스를 건드릴 수 있어 중단"; exit 2; }; done
 i=$(inode "$H/.termux/boot/t33a_boot.sh")
 ( export PATH="$T/pbin:$PATH" T33A_REPO_SCRIPTS="$T/repo"; . "$LIB"; HOME="$H"; REPO="$T/urepo"; CHANGED_SCRIPTS=1; log() { :; }; eval "$blk" ) 2>/dev/null
 cmp -s "$H/.termux/boot/t33a_boot.sh" "$T/repo/t33a_boot.sh" && [ "$(inode "$H/.termux/boot/t33a_boot.sh")" != "$i" ] && [ -x "$H/.termux/boot/t33a_boot.sh" ] \
   && pass "update.sh [3.5]: 부팅 사본을 레포 사본으로 원자 교체" || fail "update.sh [3.5]: [$(head -c 20 "$H/.termux/boot/t33a_boot.sh")]"
+
+# 13. setup_phone.sh 의 사본 쓰기 구간 실행(네 번째 쓰는 곳 — 같은 복사기를 써야 한다)
+fresh; H="$T/shome"; rm -rf "$H"; mkdir -p "$H/.termux/boot"; echo old-boot > "$H/.termux/boot/t33a_boot.sh"; i=$(inode "$H/.termux/boot/t33a_boot.sh")
+cp "$LIB" "$T/repo/t33a_sync.sh"
+blk=$( { sed -n '/^# boot.sh를 Termux:Boot에 등록/,/Termux:Boot 등록 완료"/p' "$ROOT/scripts/t33a_setup_phone.sh"; grep '^t33a_sync_dl /sdcard/Download' "$ROOT/scripts/t33a_setup_phone.sh"; } | sed "s#/sdcard/Download#$T/dl#g")
+[ "$(printf '%s\n' "$blk" | grep -c 't33a_')" -ge 3 ] || fail "setup_phone.sh 구간 추출 실패"
+( REPO="$T/urepo"; BOOT_DIR="$H/.termux/boot"; eval "$blk" ) > /dev/null
+same_all && cmp -s "$H/.termux/boot/t33a_boot.sh" "$T/repo/t33a_boot.sh" && [ "$(inode "$H/.termux/boot/t33a_boot.sh")" != "$i" ] \
+  && pass "setup_phone.sh: 다운로드 5개·부팅 사본을 레포와 같게(원자 교체)" || fail "setup_phone.sh 구간 후 불일치"
 
 echo "fails=$fails"; exit $fails
