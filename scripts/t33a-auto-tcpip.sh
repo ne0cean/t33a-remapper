@@ -123,9 +123,22 @@ tls_endpoints() {
     done
 }
 
+# 접속한 기기의 시리얼. 막 붙은 Tailscale 중계 링크에선 첫 shell 이 빈 응답으로 끝나기도 한다(2026-11-21 09:19:14 실측:
+# 직접 조회는 일치인데 "불일치"로 끊음) — 빈 응답이면 2초 간격으로 2번 더 묻는다. 끝내 비면 빈 문자열(=확인 실패).
+# 값이 온 경우는 다시 묻지 않는다(다른 기기를 재시도로 통과시키지 않도록).
+serial_of() {
+    local s i
+    for i in 1 2 3; do
+        s=$("$ADB" -s "$1" shell getprop ro.serialno 2>/dev/null | tr -d '\r\n ')
+        [ -n "$s" ] && { echo "$s"; return 0; }
+        [ "$i" -lt 3 ] && sleep 2
+    done
+    echo ""
+}
+
 # 연결된 폰 주소를 표준출력으로. 없으면 빈 문자열. 필요하면 직접 붙으러 간다.
 ensure_device() {
-    local d tls cand ipre
+    local d tls cand ipre s
     ipre=$(printf '%s' "$PHONE_IP" | sed 's/\./\\./g')   # 리터럴 dot 이스케이프
 
     # 후보 IP: 알려진 LAN IP → Tailscale IP → (맥이 핫스팟에 붙어 있으면) 기본 게이트웨이. 2026-10-13: 전역 도달.
@@ -144,8 +157,11 @@ ensure_device() {
         if "$ADB" connect "$cand:5555" 2>&1 | grep -qiE "^connected|already connected"; then
             if [ "$cand" != "$PHONE_IP" ]; then
                 # 낯선 주소(게이트웨이·Tailscale)는 시리얼로 신원 확인 — 남의 기기에 쓰기 금지(리뷰 H4, 2026-10-13)
-                if [ "$("$ADB" -s "$cand:5555" shell getprop ro.serialno 2>/dev/null | tr -d '\r\n ')" != "$PHONE_SERIAL" ]; then
-                    log "후보 $cand:5555 는 시리얼 불일치 — 연결 해제"
+                # 확인 실패여도 연결은 끊는다 — 남겨 두면 다음 주기 맨 앞 `adb devices` 루프가 신원 확인 없이 쓴다.
+                s=$(serial_of "$cand:5555")
+                if [ "$s" != "$PHONE_SERIAL" ]; then
+                    if [ -z "$s" ]; then log "후보 $cand:5555 신원 확인 응답 없음(3회) — 연결 해제, 다음 주기 재시도"
+                    else log "후보 $cand:5555 는 시리얼 불일치 — 연결 해제"; fi
                     "$ADB" disconnect "$cand:5555" >/dev/null 2>&1; continue
                 fi
                 log "후보 경로로 접속: $cand:5555 (LAN $PHONE_IP 대신, 시리얼 확인)"
@@ -163,7 +179,7 @@ ensure_device() {
     fi
     for cand in $eps; do
         "$ADB" connect "$cand" 2>&1 | grep -qiE "^connected|already connected" || continue
-        if [ "$("$ADB" -s "$cand" shell getprop ro.serialno 2>/dev/null | tr -d '\r\n ')" = "$PHONE_SERIAL" ]; then
+        if [ "$(serial_of "$cand")" = "$PHONE_SERIAL" ]; then
             log "IP 변경 감지 — 시리얼로 재발견: $cand (기존 $PHONE_IP)"
             PHONE_IP="${cand%%:*}"
             echo "$cand"; return 0
