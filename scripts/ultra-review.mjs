@@ -206,6 +206,31 @@ async function scoreIssue(issue, diff) {
   }
 }
 
+// Exact duplicates share one model score, while each original lens finding remains in output.
+function duplicateKey(issue) {
+  if (typeof issue?.title !== 'string' || !issue.title.trim()) return null;
+  const title = issue.title.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  const file = String(issue.file ?? '').trim().replace(/\\/g, '/');
+  const line = String(issue.line ?? '').trim();
+  if (!file || !line) return null;
+  return JSON.stringify([title, file, line]);
+}
+export async function scoreFindings(found, scorer) {
+  const firstByKey = new Map();
+  const representative = found.map((issue, index) => {
+    const key = duplicateKey(issue);
+    if (key === null || !firstByKey.has(key)) {
+      if (key !== null) firstByKey.set(key, index);
+      return index;
+    }
+    return firstByKey.get(key);
+  });
+  const unique = [...new Set(representative)];
+  const scored = await mapLimit(unique, 4, async index => [index, await scorer(found[index])]);
+  const scores = new Map(scored);
+  return found.map((issue, index) => ({ ...issue, score: scores.get(representative[index]) }));
+}
+
 // --- 5. 코멘트 조립 ----------------------------------------------------------
 
 export function buildComment(issues, meta = {}) {
@@ -268,7 +293,7 @@ async function main() {
 
   // 병렬 확신도 채점 → 필터. null=채점실패는 드롭 말고 unscored로 표면화(false GREEN 봉쇄).
   // 채점은 이슈당 CLI 세션 1개라 무제한 팬아웃 금지 — 러너 메모리 보호를 위해 동시 4건으로 제한.
-  const scored = await mapLimit(found, 4, async i => ({ ...i, score: await scoreIssue(i, clipped) }));
+  const scored = await scoreFindings(found, i => scoreIssue(i, clipped));
   const kept = scored.filter(i => i.score !== null && i.score >= CONFIDENCE_MIN);
   const unscored = scored.filter(i => i.score === null);
   console.log(`확신도 ${CONFIDENCE_MIN}+ 통과 ${kept.length}/${scored.length}건, 미채점 ${unscored.length}`);
