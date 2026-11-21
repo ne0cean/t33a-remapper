@@ -31,44 +31,24 @@ AUTO_PULL="$HOME/t33a-remapper/scripts/t33a_auto_pull.sh"
 TG_CONF=/sdcard/Download/.t33a_telegram.conf     # BOT_TOKEN=..\nCHAT_ID=..
 REMOTE_STATE=/sdcard/Download/t33a_remote_state  # "dead <ts>" | "alive"
 
-# ── 다운로드 폴더 사본 되살리기 ────────────────────────────────
-# relay·위젯은 /sdcard/Download 사본을 실행한다. 사람이 다운로드 폴더를 정리하면 같이 지워지고, 이미 떠 있던
-# 프로세스가 죽는 순간(재부팅 등) 되살릴 파일이 없다(2026-11-21 실측: 11-14 폴더 정리 → 11-21 재부팅 뒤 미복구).
-# Termux 홈의 레포 사본(auto_pull 이 origin/main 으로 유지)에서 없는 것만 채운다 — 있는 파일은 덮지 않는다.
-# 대상은 t33a_update.sh 가 복사하는 것과 같은 5개. 텔레그램 conf 는 git 밖 비밀이라 되살릴 수 없다.
+# ── 레포 사본 맞추기 ────────────────────────────────────────
+# relay·위젯은 /sdcard/Download 사본을 실행한다. 다운로드 폴더 정리로 지워지면 재부팅 뒤 되살릴 파일이 없었다
+# (2026-11-21 실측: 11-14 정리 → 11-21 재부팅 뒤 미복구). 규칙("레포 사본과 같게")과 복사 방식은
+# 레포의 t33a_sync.sh 한 곳에 있다 — update.sh·start.sh 도 같은 것을 쓴다.
 REPO_SCRIPTS="$HOME/t33a-remapper/scripts"
 DL_DIR=/sdcard/Download
-_RESTORE_WARNED=" "
-# 0바이트 사본도 "없음"으로 본다(-s). 복사는 같은 폴더 임시 파일에 하고 원본과 같을 때만 mv — 중간에 끊긴
-# cp 가 잘린 사본을 남기면 다음 틱부터 "있음"으로 보여 영영 안 고쳐지고 relay 가 그 반쪽을 실행한다(PR #7 리뷰 H1).
-restore_missing_scripts() {
-    local f src dst tmp why
-    for f in t33a_boot.sh t33a_relay.sh t33a_start.sh t33a_status.sh T33A_status_wrapper; do
-        dst="$DL_DIR/$f"; src="$REPO_SCRIPTS/$f"; tmp="$DL_DIR/.$f.restore.$$"
-        [ -s "$dst" ] && continue
-        why=""
-        if [ ! -s "$src" ]; then why="레포 사본 없음 ($src)"
-        elif ! { cp "$src" "$tmp" 2>/dev/null && cmp -s "$src" "$tmp" && mv -f "$tmp" "$dst" 2>/dev/null; }; then
-            rm -f "$tmp" 2>/dev/null; why="복사 실패 (쓰기 불가·용량 등, 원본은 $src)"
-        fi
-        if [ -z "$why" ]; then
-            case "$f" in *.sh) chmod +x "$dst" 2>/dev/null ;; esac
-            echo "$(date): $f 가 다운로드 폴더에 없어 레포 사본에서 복구" >> "$LOG"
-            _RESTORE_WARNED="${_RESTORE_WARNED/ $f / }"
-        else
-            # 같은 실패가 15초마다 쌓이지 않게 파일당 한 번만 남긴다(복구에 성공하면 다시 무장)
-            case "$_RESTORE_WARNED" in *" $f "*) ;; *)
-                echo "$(date): $f 가 다운로드 폴더에 없음 — 복구 못함: $why" >> "$LOG"
-                _RESTORE_WARNED="$_RESTORE_WARNED$f " ;;
-            esac
-        fi
-    done
-}
+[ -s "$REPO_SCRIPTS/t33a_sync.sh" ] && . "$REPO_SCRIPTS/t33a_sync.sh"
+sync_scripts() { command -v t33a_sync_dl >/dev/null 2>&1 && t33a_sync_dl "$DL_DIR" "$LOG"; }
 
 # ── 자체 설치/업데이트 ─────────────────────────────────────────
 mkdir -p "$BOOT_DIR" "$SHORTCUT_DIR" 2>/dev/null
-# -s: 0바이트 사본이 Termux:Boot 사본을 덮으면 다음 부팅부터 아무것도 안 뜬다(격리 레인 L-SR-2) — 위젯 설치도 같은 기준
-[ -s "$SRC" ] && cp "$SRC" "$BOOT_DIR/t33a_boot.sh" && chmod +x "$BOOT_DIR/t33a_boot.sh"
+# Termux:Boot 사본은 레포 사본에서 설치한다 — 다운로드 폴더 사본이 비거나 잘려도 부팅 사본은 멀쩡하다.
+# t33a_install 은 원자 교체라 지금 실행 중인 이 파일을 깨뜨리지 않는다. 레포가 없을 때만 예전처럼 다운로드 폴더 사본.
+if command -v t33a_install >/dev/null 2>&1; then
+    t33a_install "$REPO_SCRIPTS/t33a_boot.sh" "$BOOT_DIR/t33a_boot.sh"
+else
+    [ -s "$SRC" ] && cp "$SRC" "$BOOT_DIR/t33a_boot.sh" && chmod +x "$BOOT_DIR/t33a_boot.sh"
+fi
 # 바이너리 복사는 relay(shell 유저)가 담당 — Termux 유저가 직접 하면 "text file busy"
 # BIN_SRC가 있으면 relay가 다음 watchdog 사이클에 자동 교체
 [ -f "$RELAY_SCRIPT" ] && chmod +x "$RELAY_SCRIPT"
@@ -80,16 +60,21 @@ if [ -s "$WRAPPER" ]; then
 fi
 # T33A-상태 위젯 — 읽기 전용 확인용. T33A(복구)와 분리한다:
 # 살아있나 보려고 복구 위젯을 누르면 멀쩡한 watchdog을 kill·재기동하게 된다.
-if [ -s "$STATUS_WRAPPER" ]; then
+if command -v t33a_install >/dev/null 2>&1; then
+    t33a_install "$REPO_SCRIPTS/T33A_status_wrapper" "$SHORTCUT_DIR/T33A-status"
+elif [ -s "$STATUS_WRAPPER" ]; then
     cp "$STATUS_WRAPPER" "$SHORTCUT_DIR/T33A-status" && chmod +x "$SHORTCUT_DIR/T33A-status"
 fi
 
 echo "$(date): boot started (PID $$)" > "$LOG"
 termux-wake-lock
 echo "$(date): wake lock acquired" >> "$LOG"
-# 복사 도중 kill·재부팅으로 남은 임시 파일 청소 — 시작 시점엔 다른 복구가 돌지 않는다(격리 레인 L-SR-5)
-rm -f "$DL_DIR"/.t33a_*.restore.* "$DL_DIR"/.T33A_*.restore.* 2>/dev/null
-restore_missing_scripts   # 위 줄이 로그를 새로 쓰므로 그 뒤에 부른다(복구 기록이 남도록)
+if command -v t33a_sync_dl >/dev/null 2>&1; then
+    t33a_sync_cleanup "$DL_DIR"   # 끊긴 교체가 남긴 임시 파일 — 시작 시점엔 다른 교체가 돌지 않는다
+    sync_scripts                  # 위 줄이 로그를 새로 쓰므로 그 뒤에 부른다(교체 기록이 남도록)
+else
+    echo "$(date): $REPO_SCRIPTS/t33a_sync.sh 없음 — 다운로드 폴더 사본 맞추기 생략(레포 확인 필요)" >> "$LOG"
+fi
 
 # ── auto_pull 백그라운드 시작 (GitHub 변경 감지 → 자동 업데이트) ────────
 if [ -f "$AUTO_PULL" ]; then
@@ -408,7 +393,7 @@ update_live_notification() {   # $1=heartbeat age → alive/dead 판정은 여�
 echo "$(date): watchdog loop started" >> "$LOG"
 FAILS=0
 while true; do
-    restore_missing_scripts   # relay 가 죽었을 때 실행할 사본이 있어야 한다 — 매 틱 확인(파일 5개 존재 검사뿐)
+    sync_scripts   # relay 가 죽었을 때 실행할 사본이 온전해야 한다 — 매 틱 레포와 대조(작은 파일 5개 cmp)
     # 무선 디버깅 꺼짐 감지 → 재활성화 — 단 5555 가 이미 열려 있으면 하지 않는다(2026-10-14 의장 결정).
     # 맥 keep_levers 는 "실제 5555 세션" 을 보고 폰은 prop 만 본다(폰에서 외부 5555 피어를 확인할 수단이 없음). 그래서
     # 폰 주소가 바뀌고 Tailscale 도 없는 경우는 아무도 플래그를 다시 켜지 않는다 — 수용한 한계(README "한계" 참고).

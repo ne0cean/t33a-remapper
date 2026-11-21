@@ -65,14 +65,9 @@ fi
 
 # [3] 스크립트 변경 시 /sdcard/Download로 복사
 if [ "$CHANGED_SCRIPTS" -gt 0 ]; then
-    for f in boot relay start status; do
-        src="$REPO/scripts/t33a_${f}.sh"
-        dst="$SCRIPTS_DST/t33a_${f}.sh"
-        [ -f "$src" ] && cp "$src" "$dst" && chmod +x "$dst"
-    done
-    # 상태 위젯 래퍼 — boot.sh가 여기서 ~/.shortcuts/T33A-status 로 설치한다
-    [ -f "$REPO/scripts/T33A_status_wrapper" ] && \
-        cp "$REPO/scripts/T33A_status_wrapper" "$SCRIPTS_DST/T33A_status_wrapper"
+    # 레포 사본과 같게 맞춘다 — 원자 교체(임시 파일 → cmp → mv)라 끊겨도 잘린 사본이 남지 않는다. 규칙은 t33a_sync.sh 한 곳.
+    T33A_REPO_SCRIPTS="$REPO/scripts"; . "$REPO/scripts/t33a_sync.sh"
+    t33a_sync_dl "$SCRIPTS_DST" "$LOG"
     log "스크립트 갱신: boot/relay/start/status"
 fi
 
@@ -81,8 +76,7 @@ fi
 if [ "$CHANGED_SCRIPTS" -gt 0 ]; then
     BOOT_DIR="$HOME/.termux/boot"
     mkdir -p "$BOOT_DIR"
-    cp "$REPO/scripts/t33a_boot.sh" "$BOOT_DIR/t33a_boot.sh"
-    chmod +x "$BOOT_DIR/t33a_boot.sh"
+    t33a_install "$REPO/scripts/t33a_boot.sh" "$BOOT_DIR/t33a_boot.sh"   # 원자 교체 — 돌고 있는 옛 boot.sh 를 깨뜨리지 않는다
     OLD_BOOT=$(pgrep -f "t33a_boot.sh" 2>/dev/null | head -1)
     if [ -n "$OLD_BOOT" ]; then
         kill "$OLD_BOOT" 2>/dev/null
