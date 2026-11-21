@@ -23,7 +23,7 @@ EOF
 # 가짜 dns-sd: 인자를 기록하고 준비된 출력을 낸 뒤 끝나지 않는다(exec 라 PID 가 그대로 — kill 대상)
 cat > "$T/fakednssd" <<EOF
 #!/bin/bash
-echo "\$*" >> "$T/calls"
+echo "\$*" >> "$T/calls"; echo \$\$ >> "$T/pids"
 case "\$1" in -B) cat "$T/b_out" ;; -L) cat "$T/l_out" ;; -G) cat "$T/g_out" ;; esac
 : > "$T/done"
 exec sleep 20
@@ -50,8 +50,9 @@ check() { # name got want [want_calls 파일 내용] [elapsed]
   [ "$2" = "$3" ] || ok=0
   [ -z "$4" ] || [ "$(cat "$T/calls" 2>/dev/null)" = "$4" ] || ok=0
   [ "${5:-0}" -lt 8 ] || ok=0
-  pgrep -f "$T/fakednssd" >/dev/null 2>&1 && ok=0
-  pgrep -f "sleep 20" >/dev/null 2>&1 && pkill -f "sleep 20" 2>/dev/null
+  # 남은 가짜 dns-sd 는 기록해 둔 PID 로만 판정·정리한다 — 이름 패턴(pkill -f)은 무관한 프로세스를 죽인다(리뷰 2R)
+  local pid; for pid in $(cat "$T/pids" 2>/dev/null); do kill -0 "$pid" 2>/dev/null && { ok=0; kill "$pid" 2>/dev/null; }; done
+  : > "$T/pids"
   if [ "$ok" = 1 ]; then echo "PASS $1"
   else echo "FAIL $1 (want [$3] got [$2] ${5:-0}초, dns-sd 호출: $(tr '\n' '|' < "$T/calls" 2>/dev/null))"; fails=$((fails+1)); fi
 }
