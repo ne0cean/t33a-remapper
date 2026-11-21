@@ -5,7 +5,7 @@
 # 가짜 dns-sd 는 실물처럼 스스로 끝나지 않는다 — dnssd_run 이 죽이지 않으면 케이스가 느려져 FAIL 한다.
 SRC="${1:-$(cd "$(dirname "$0")/.." && pwd)/scripts/t33a-auto-tcpip.sh}"; T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 fn=$(sed -n '/^tls_endpoints() {/,/^}/p' "$SRC"); run=$(sed -n '/^dnssd_run() (/,/^)/p' "$SRC")
-ens=$(sed -n '/^ensure_device() {/,/^}/p' "$SRC")
+ens=$(sed -n '/^ensure_device() {/,/^}/p' "$SRC"); sof=$(sed -n '/^serial_of() {/,/^}/p' "$SRC")   # serial_of 없는 이전 판도 허용
 [ -n "$fn" ] && [ -n "$run" ] && [ -n "$ens" ] || { echo "ABORT: tls_endpoints/dnssd_run/ensure_device 추출 실패 ($SRC)"; exit 2; }
 fails=0
 
@@ -43,6 +43,7 @@ log(){ echo \"\$1\" >> \"\$LOGF\"; }; networksetup(){ :; }; route(){ :; }
 sleep(){ local i=0; while [ ! -e '$T/done' ] && [ \$i -lt 100 ]; do command sleep 0.05; i=\$((i+1)); done; rm -f '$T/done'; }
 $run
 $fn
+$sof
 $ens"
 
 check() { # name got want [want_calls 파일 내용] [elapsed]
