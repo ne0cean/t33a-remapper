@@ -30,6 +30,7 @@
 #  v6 — 막힌 adb 서버 자가치유(2026-10-09, heal_adb_server 위 주석).
 #  v7(2026-10-14) — 무선 디버깅 플래그는 이 맥이 5555 세션으로 붙어 있지 않을 때만 켠다. 상시로 켜면 폰이 공유기(BSSID)
 #     마다 허용 창을 띄운다. 폰 t33a_boot.sh watchdog 은 prop 기준(5555 면 안 켬). v5 의 "플래그" 부분을 대체.
+#  v8(2026-11-21) — 무선 디버깅 TLS 접속점 탐색에 시스템 Bonjour(dns-sd) 폴백(tls_endpoints 위 주석).
 
 LOG=/tmp/t33a-tcpip.log
 STATEDIR=/tmp
@@ -37,6 +38,7 @@ FAILS_FILE="$STATEDIR/t33a-tcpip.fails"
 LOCK_PIDF="$STATEDIR/t33a-tcpip.pid"
 LEVER_TS_FILE="$STATEDIR/t33a-tcpip.lever_ts"
 ADB=/opt/homebrew/bin/adb
+DNSSD=/usr/bin/dns-sd
 PHONE_IP="${T33A_IP:-192.168.0.18}"
 PHONE_TS_IP="${T33A_TS_IP:-100.107.190.45}"   # 폰 Tailscale IP — 집·회사·테더링·LTE 어디서든 닿는 전역 경로 (2026-10-13)
 HOTSPOT_SSID="${T33A_HOTSPOT_SSID:-The blade}" # 맥이 폰 핫스팟에 붙어 있으면 폰 = 기본 게이트웨이
@@ -86,6 +88,32 @@ FAILS=$(cat "$FAILS_FILE" 2>/dev/null)
 case "$FAILS" in ''|*[!0-9]*) FAILS=0 ;; esac
 set_fails() { FAILS="$1"; echo "$FAILS" > "$FAILS_FILE"; }
 
+# dns-sd 는 스스로 끝나지 않는다 — $1 초 뒤 죽이고 그동안의 출력을 돌려준다.
+dnssd_run() {
+    local t="$1" p; shift
+    "$DNSSD" "$@" 2>/dev/null & p=$!
+    sleep "$t"; kill "$p" 2>/dev/null; wait "$p" 2>/dev/null
+    return 0
+}
+
+# 무선 디버깅 TLS 접속점을 "주소:포트" 한 줄씩. adb 자체 탐색이 비면 시스템 Bonjour(dns-sd)로 찾는다.
+# 2026-11-21 실측: 폰이 광고 중인데 adb 37.0.2(10-30 설치)의 `adb mdns services` 만 빈 목록 — 새로 띄운 서버도
+# 같았다. 재부팅 뒤 5555 가 닫힌 폰을 맥이 영영 못 찾던 원인. dns-sd 경로는 인스턴스 이름의 시리얼로 이 폰만 고른다.
+tls_endpoints() {
+    local out inst hp host port ip
+    out=$("$ADB" mdns services 2>/dev/null | awk '/_adb-tls-connect/ {print $3}')
+    [ -n "$out" ] && { echo "$out"; return 0; }
+    for inst in $(dnssd_run 3 -B _adb-tls-connect._tcp local. \
+                  | awk -v s="adb-$PHONE_SERIAL-" '$2=="Add" && index($NF,s)==1 {print $NF}' | sort -u); do
+        hp=$(dnssd_run 2 -L "$inst" _adb-tls-connect._tcp local. \
+             | sed -n 's/.* can be reached at \([^ ]*\):\([0-9][0-9]*\) .*/\1 \2/p' | head -1)
+        host="${hp% *}"; port="${hp#* }"
+        [ -n "$hp" ] && [ -n "$host" ] && [ -n "$port" ] || continue
+        ip=$(dnssd_run 2 -G v4 "$host" | awk '$2=="Add" && $6 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ {print $6; exit}')
+        [ -n "$ip" ] && echo "$ip:$port"
+    done
+}
+
 # 연결된 폰 주소를 표준출력으로. 없으면 빈 문자열. 필요하면 직접 붙으러 간다.
 ensure_device() {
     local d tls cand ipre
@@ -119,11 +147,12 @@ ensure_device() {
     ipre=$(printf '%s' "$PHONE_IP" | sed 's/\./\\./g')
 
     # 무선디버깅 TLS 포트 능동 조회 — 먼저 알려진 IP, 실패 시 시리얼로 신원 확인(DHCP 대비)
-    tls=$("$ADB" mdns services 2>/dev/null | awk -v ip="$ipre" '/_adb-tls-connect/ && $3 ~ "^"ip":" {print $3}' | head -1)
+    local eps; eps=$(tls_endpoints)
+    tls=$(printf '%s\n' "$eps" | awk -v ip="$ipre" '$1 ~ "^"ip":" {print $1}' | head -1)
     if [ -n "$tls" ] && "$ADB" connect "$tls" 2>&1 | grep -qiE "^connected|already connected"; then
         echo "$tls"; return 0
     fi
-    for cand in $("$ADB" mdns services 2>/dev/null | awk '/_adb-tls-connect/ {print $3}'); do
+    for cand in $eps; do
         "$ADB" connect "$cand" 2>&1 | grep -qiE "^connected|already connected" || continue
         if [ "$("$ADB" -s "$cand" shell getprop ro.serialno 2>/dev/null | tr -d '\r\n ')" = "$PHONE_SERIAL" ]; then
             log "IP 변경 감지 — 시리얼로 재발견: $cand (기존 $PHONE_IP)"
