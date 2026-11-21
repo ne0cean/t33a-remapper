@@ -13,9 +13,15 @@ STATUS_FILE=/data/local/tmp/t33a.status
 ADB=/data/data/com.termux/files/usr/bin/adb
 BOOT_DIR="$HOME/.termux/boot"
 # boot.sh 자동 설치 — start.sh가 Termux 유저로 실행되므로 ~/.termux/boot/ 접근 가능
-[ -f /sdcard/Download/t33a_boot.sh ] && mkdir -p "$BOOT_DIR" && \
-    cp /sdcard/Download/t33a_boot.sh "$BOOT_DIR/t33a_boot.sh" && \
-    chmod +x "$BOOT_DIR/t33a_boot.sh" 2>/dev/null || true
+# 레포 사본에서 원자 설치(t33a_sync.sh) — 다운로드 폴더 사본이 비거나 잘려도 부팅 사본을 덮지 않는다. 레포가 없을 때만 예전 방식.
+mkdir -p "$BOOT_DIR" 2>/dev/null
+if [ -s "$HOME/t33a-remapper/scripts/t33a_sync.sh" ]; then
+    . "$HOME/t33a-remapper/scripts/t33a_sync.sh"
+    t33a_install "$HOME/t33a-remapper/scripts/t33a_boot.sh" "$BOOT_DIR/t33a_boot.sh"
+elif [ -s /sdcard/Download/t33a_boot.sh ]; then
+    cp /sdcard/Download/t33a_boot.sh "$BOOT_DIR/t33a_boot.sh" && chmod +x "$BOOT_DIR/t33a_boot.sh" 2>/dev/null
+fi
+true
 
 log() { echo "$(date): $1" >> "$LOG"; }
 

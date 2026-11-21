@@ -42,11 +42,10 @@ EOF
 chmod +x "$SHORTCUT_DIR/T33A_Update"
 
 # boot.sh를 Termux:Boot에 등록
-if [ -f "$REPO/scripts/t33a_boot.sh" ]; then
-    cp "$REPO/scripts/t33a_boot.sh" "$BOOT_DIR/t33a_boot.sh"
-    chmod +x "$BOOT_DIR/t33a_boot.sh"
-    echo "  Termux:Boot 등록 완료"
-fi
+# 사본 쓰기는 t33a_sync.sh 한 곳으로(boot·update·start 와 같은 원자 교체 — 재설치 때 돌고 있는 boot.sh 를 깨뜨리지 않음)
+T33A_REPO_SCRIPTS="$REPO/scripts"; . "$REPO/scripts/t33a_sync.sh"
+t33a_install "$REPO/scripts/t33a_boot.sh" "$BOOT_DIR/t33a_boot.sh" || :   # 교체 성공도 1 을 돌려준다 — 9행 set -e 에서 끊기지 않게
+[ -s "$BOOT_DIR/t33a_boot.sh" ] && echo "  Termux:Boot 등록 완료"
 
 # [4] 초기 바이너리 빌드
 echo "[4/4] 초기 빌드 (clang)..."
@@ -59,10 +58,7 @@ chmod +x /sdcard/Download/t33a_remap
 echo "  바이너리: $(ls -lh /sdcard/Download/t33a_remap | awk '{print $5}')"
 
 # 스크립트 /sdcard/Download에도 복사 (relay/boot가 거기서 읽음)
-for f in boot relay start; do
-    cp "$REPO/scripts/t33a_${f}.sh" "/sdcard/Download/t33a_${f}.sh"
-    chmod +x "/sdcard/Download/t33a_${f}.sh"
-done
+t33a_sync_dl /sdcard/Download /sdcard/Download/t33a_boot.log   # 5개(boot·relay·start·status·상태 위젯 래퍼) 레포와 같게
 cp "$REPO/t33a.conf" /sdcard/Download/t33a.conf 2>/dev/null || true
 
 echo ""
