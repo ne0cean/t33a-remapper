@@ -44,8 +44,11 @@ chmod +x "$SHORTCUT_DIR/T33A_Update"
 # boot.sh를 Termux:Boot에 등록
 # 사본 쓰기는 t33a_sync.sh 한 곳으로(boot·update·start 와 같은 원자 교체 — 재설치 때 돌고 있는 boot.sh 를 깨뜨리지 않음)
 T33A_REPO_SCRIPTS="$REPO/scripts"; . "$REPO/scripts/t33a_sync.sh"
-t33a_install "$REPO/scripts/t33a_boot.sh" "$BOOT_DIR/t33a_boot.sh" || :   # 교체 성공도 1 을 돌려준다 — 9행 set -e 에서 끊기지 않게
-[ -s "$BOOT_DIR/t33a_boot.sh" ] && echo "  Termux:Boot 등록 완료"
+_rc=0; t33a_install "$REPO/scripts/t33a_boot.sh" "$BOOT_DIR/t33a_boot.sh" || _rc=$?   # 교체 성공도 1 — 9행 set -e 에서 끊기지 않게 || 로 받는다
+case $_rc in
+    0|1) echo "  Termux:Boot 등록 완료" ;;
+    *)   echo "  ⚠️ Termux:Boot 등록 실패(반환 $_rc: 2=레포 사본 없음 3=복사 실패 4=문법 오류) — 재부팅 뒤 자동 시작 안 됨, 확인 필요" ;;
+esac
 
 # [4] 초기 바이너리 빌드
 echo "[4/4] 초기 빌드 (clang)..."

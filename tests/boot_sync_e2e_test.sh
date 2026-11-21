@@ -21,7 +21,8 @@ echo "old-boot" > "$T/home/.termux/boot/t33a_boot.sh"; echo "old-widget" > "$T/h
 : > "$T/dl/T33A_wrapper"; echo "old-recover" > "$T/home/.shortcuts/T33A"
 : > "$T/home/.termux/boot/.t33a_boot.sh.sync.4242"; : > "$T/home/.shortcuts/.T33A.sync.4242"; echo other > "$T/home/.shortcuts/HSC"
 : > "$T/home/.shortcuts/.HSC.sync.1"   # 남의 숨김 임시 파일 — 우리 이름이 아니니 보존
-touch -t 202001010000 "$T/home/.termux/boot/.t33a_boot.sh.sync.4242" "$T/home/.shortcuts/.T33A.sync.4242" "$T/home/.shortcuts/.HSC.sync.1"
+: > "$T/home/.termux/.t33a_boot.sh.sync.4243"; echo keep > "$T/home/.termux/termux.properties"   # 새 임시 위치(~/.termux)의 잔해 + 남의 설정
+touch -t 202001010000 "$T/home/.termux/boot/.t33a_boot.sh.sync.4242" "$T/home/.shortcuts/.T33A.sync.4242" "$T/home/.shortcuts/.HSC.sync.1" "$T/home/.termux/.t33a_boot.sh.sync.4243"
 BOOT_INODE=$(ls -i "$T/home/.termux/boot/t33a_boot.sh" | awk '{print $1}')
 
 sed -e "s#/sdcard/Download#$T/dl#g" -e "s#/data/local/tmp#$T/tmp#g" \
@@ -69,7 +70,7 @@ n=$(grep -c '레포 사본으로 교체' "$L" 2>/dev/null); [ "$n" = 6 ] && pass
   || fail "Termux:Boot 사본: [$(head -c 40 "$T/home/.termux/boot/t33a_boot.sh")]"
 [ "$(ls -i "$T/home/.termux/boot/t33a_boot.sh" | awk '{print $1}')" != "$BOOT_INODE" ] && pass "부팅 사본 교체는 mv(새 inode — 실행 중인 자기 파일을 제자리에서 덮지 않음)" || fail "부팅 사본 제자리 덮어쓰기"
 [ "$(cat "$T/home/.shortcuts/T33A")" = "old-recover" ] && pass "0바이트 복구 위젯 래퍼가 설치된 T33A 위젯을 덮지 않음" || fail "T33A 위젯: [$(cat "$T/home/.shortcuts/T33A")]"
-[ ! -e "$T/home/.termux/boot/.t33a_boot.sh.sync.4242" ] && [ ! -e "$T/home/.shortcuts/.T33A.sync.4242" ] && [ "$(cat "$T/home/.shortcuts/HSC")" = other ] && [ -e "$T/home/.shortcuts/.HSC.sync.1" ] \
+[ ! -e "$T/home/.termux/boot/.t33a_boot.sh.sync.4242" ] && [ ! -e "$T/home/.shortcuts/.T33A.sync.4242" ] && [ ! -e "$T/home/.termux/.t33a_boot.sh.sync.4243" ] && [ "$(cat "$T/home/.termux/termux.properties")" = keep ] && [ "$(cat "$T/home/.shortcuts/HSC")" = other ] && [ -e "$T/home/.shortcuts/.HSC.sync.1" ] \
   && pass "부팅·위젯 폴더의 임시 파일도 청소(남의 위젯 보존)" || fail "부팅·위젯 폴더 청소"
 [ "$(cat "$T/home/.shortcuts/T33A-status")" = "repo:T33A_status_wrapper" ] && pass "상태 위젯은 레포 사본에서" || fail "상태 위젯: [$(cat "$T/home/.shortcuts/T33A-status")]"
 [ ! -e "$T/dl/.t33a_relay.sh.sync.99999" ] && [ "$(cat "$T/dl/.t33a_telegram.conf")" = secret ] && pass "시작 때 임시 파일만 청소(비밀 conf 보존)" || fail "청소"
@@ -92,4 +93,11 @@ grep -q 'starting relay via ADB' "$T/dl/t33a_boot.log" && pass "3회차가 relay
 [ -e "$T/snapS/.taken" ] && same "$T/snapS" && pass "relay 를 띄우는 순간 5개 사본이 레포와 같음(재부팅 사고 경로)" \
   || fail "relay 기동 시점 사본: $(for f in $FILES; do printf '%s=[%s] ' $f "$(head -c 12 "$T/snapS/$f" 2>/dev/null)"; done)"
 [ "$(cat "$T/home/.shortcuts/T33A")" = new-recover ] && [ -x "$T/home/.shortcuts/T33A" ] && pass "복구 위젯: 내용 있는 래퍼면 설치 + 실행 권한" || fail "복구 위젯 설치: [$(cat "$T/home/.shortcuts/T33A")]"
+
+# 4회차: 끊긴 교체 잔해 이름(.t33a_boot.sh.sync.<PID>)으로 실행되면 아무것도 하지 않고 바로 끝난다(Termux:Boot 이중 기동 방지)
+cp "$T/boot.sh" "$T/home/.termux/boot/.t33a_boot.sh.sync.777"; echo "marker" > "$T/dl/t33a_boot.log"; rm -f "$T/ticks"
+HOME="$T/home" PATH="$T/bin:$PATH" bash "$T/home/.termux/boot/.t33a_boot.sh.sync.777" > "$T/out" 2>&1 & bp=$!
+for i in $(seq 1 50); do kill -0 "$bp" 2>/dev/null || break; command sleep 0.1; done
+if kill -0 "$bp" 2>/dev/null; then kill "$bp" 2>/dev/null; fail "잔해 이름으로 실행된 boot.sh 가 5초 안에 끝나지 않음"
+else [ "$(cat "$T/dl/t33a_boot.log")" = marker ] && [ ! -e "$T/ticks" ] && pass "잔해 이름(.sync.)으로 실행되면 즉시 종료(로그·감시 루프 없음)" || fail "잔해 이름 실행이 일을 함"; fi
 echo "fails=$fails"; exit $fails

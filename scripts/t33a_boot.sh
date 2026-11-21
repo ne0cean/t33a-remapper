@@ -10,6 +10,9 @@
 # boot.sh의 ADB는 relay 최초 시작 + 재시작 시에만 필요.
 # WiFi ADB 없을 때: deeplink 알림으로 사용자에게 무선 디버깅 토글 1회 안내.
 
+# 끊긴 교체가 남긴 임시 사본(.t33a_boot.sh.sync.<PID>)으로 실행됐으면 바로 끝낸다 — Termux:Boot 는 숨김 파일도 실행해서,
+# 옛 버전 t33a_sync.sh 가 ~/.termux/boot 안에 남긴 잔해가 두 번째 watchdog 을 띄울 수 있었다(PR #7 적대 리뷰 MEDIUM).
+case "$(basename "$0")" in *.sync.*) exit 0 ;; esac
 LOG=/sdcard/Download/t33a_boot.log
 RELAY_SCRIPT=/sdcard/Download/t33a_relay.sh
 RELAY_PID=/sdcard/Download/t33a_relay.pid   # /sdcard: boot.sh(Termux)가 /proc 없이도 읽기 가능
@@ -73,7 +76,7 @@ echo "$(date): boot started (PID $$)" > "$LOG"
 termux-wake-lock
 echo "$(date): wake lock acquired" >> "$LOG"
 if command -v t33a_sync_dl >/dev/null 2>&1; then
-    t33a_sync_cleanup "$DL_DIR" "$BOOT_DIR" "$SHORTCUT_DIR"   # 끊긴 교체가 남긴 임시 파일(1분 넘은 것만 — 동시 교체 중인 것은 보호)
+    t33a_sync_cleanup "$DL_DIR" "$HOME/.termux" "$BOOT_DIR" "$SHORTCUT_DIR"   # 끊긴 교체가 남긴 임시 파일(1분 넘은 것만 — 동시 교체 중인 것은 보호)
     sync_scripts                  # 위 줄이 로그를 새로 쓰므로 그 뒤에 부른다(교체 기록이 남도록)
 else
     echo "$(date): $REPO_SCRIPTS/t33a_sync.sh 없음 — 다운로드 폴더 사본 맞추기 생략(레포 확인 필요)" >> "$LOG"
