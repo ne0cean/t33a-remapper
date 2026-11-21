@@ -39,19 +39,26 @@ REMOTE_STATE=/sdcard/Download/t33a_remote_state  # "dead <ts>" | "alive"
 REPO_SCRIPTS="$HOME/t33a-remapper/scripts"
 DL_DIR=/sdcard/Download
 _RESTORE_WARNED=" "
+# 0바이트 사본도 "없음"으로 본다(-s). 복사는 같은 폴더 임시 파일에 하고 원본과 같을 때만 mv — 중간에 끊긴
+# cp 가 잘린 사본을 남기면 다음 틱부터 "있음"으로 보여 영영 안 고쳐지고 relay 가 그 반쪽을 실행한다(PR #7 리뷰 H1).
 restore_missing_scripts() {
-    local f src dst
+    local f src dst tmp why
     for f in t33a_boot.sh t33a_relay.sh t33a_start.sh t33a_status.sh T33A_status_wrapper; do
-        dst="$DL_DIR/$f"; src="$REPO_SCRIPTS/$f"
-        [ -e "$dst" ] && continue
-        if [ -f "$src" ] && cp "$src" "$dst" 2>/dev/null; then
+        dst="$DL_DIR/$f"; src="$REPO_SCRIPTS/$f"; tmp="$DL_DIR/.$f.restore.$$"
+        [ -s "$dst" ] && continue
+        why=""
+        if [ ! -s "$src" ]; then why="레포 사본 없음 ($src)"
+        elif ! { cp "$src" "$tmp" 2>/dev/null && cmp -s "$src" "$tmp" && mv -f "$tmp" "$dst" 2>/dev/null; }; then
+            rm -f "$tmp" 2>/dev/null; why="복사 실패 (쓰기 불가·용량 등, 원본은 $src)"
+        fi
+        if [ -z "$why" ]; then
             case "$f" in *.sh) chmod +x "$dst" 2>/dev/null ;; esac
             echo "$(date): $f 가 다운로드 폴더에 없어 레포 사본에서 복구" >> "$LOG"
             _RESTORE_WARNED="${_RESTORE_WARNED/ $f / }"
         else
-            # 레포 사본도 없으면 15초마다 같은 줄이 쌓이지 않게 파일당 한 번만 남긴다
+            # 같은 실패가 15초마다 쌓이지 않게 파일당 한 번만 남긴다(복구에 성공하면 다시 무장)
             case "$_RESTORE_WARNED" in *" $f "*) ;; *)
-                echo "$(date): $f 가 다운로드 폴더에 없고 레포 사본에서도 복구 못함 ($src)" >> "$LOG"
+                echo "$(date): $f 가 다운로드 폴더에 없음 — 복구 못함: $why" >> "$LOG"
                 _RESTORE_WARNED="$_RESTORE_WARNED$f " ;;
             esac
         fi

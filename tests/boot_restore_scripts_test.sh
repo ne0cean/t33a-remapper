@@ -31,11 +31,11 @@ ok=1; for f in $FILES; do [ "$(cat "$T/dl/$f")" = "live:$f" ] || ok=0; done
 setup; echo "live:relay" > "$T/dl/t33a_relay.sh"; rm "$T/repo/t33a_start.sh"; run
 [ "$(cat "$T/dl/t33a_relay.sh")" = "live:relay" ] && pass "있는 relay 는 그대로" || fail "있는 relay 덮음"
 [ "$(cat "$T/dl/t33a_status.sh" 2>/dev/null)" = "repo:t33a_status.sh" ] && pass "없는 것만 채움" || fail "없는 것 채우기"
-[ ! -e "$T/dl/t33a_start.sh" ] && grep -q 't33a_start.sh 가 다운로드 폴더에 없고 레포 사본에서도' "$T/log" \
+[ ! -e "$T/dl/t33a_start.sh" ] && grep -q 't33a_start.sh 가 다운로드 폴더에 없음 — 복구 못함: 레포 사본 없음' "$T/log" \
   && pass "레포 사본도 없으면 만들지 않고 기록" || fail "레포 사본 부재 처리"
 
 setup; rm "$T/repo/t33a_relay.sh"; run 3
-[ "$(grep -c 't33a_relay.sh 가 다운로드 폴더에 없고' "$T/log")" = 1 ] && pass "복구 못한 파일 경고는 3틱에 1번만" \
+[ "$(grep -c 't33a_relay.sh 가 다운로드 폴더에 없음 — 복구 못함' "$T/log")" = 1 ] && pass "복구 못한 파일 경고는 3틱에 1번만" \
   || fail "경고 반복 $(grep -c 't33a_relay.sh 가' "$T/log")번"
 
 # 같은 셸에서: 복구 실패(경고) → 레포 사본이 생겨 복구 → 다시 지워지고 레포도 없으면 다시 경고
@@ -44,8 +44,32 @@ got=$(bash -c "LOG='$T/log'; REPO_SCRIPTS='$T/repo'; DL_DIR='$T/dl'; _RESTORE_WA
 $fn
 restore_missing_scripts; echo r > '$T/repo/t33a_relay.sh'; restore_missing_scripts
 rm '$T/dl/t33a_relay.sh' '$T/repo/t33a_relay.sh'; restore_missing_scripts
-grep -c 't33a_relay.sh 가 다운로드 폴더에 없고' '$T/log'")
+grep -c 't33a_relay.sh 가 다운로드 폴더에 없음 — 복구 못함' '$T/log'")
 [ "$got" = 2 ] && pass "복구에 성공하면 경고 표시를 지워 다음 부재 때 다시 경고" || fail "경고 재무장 (got $got)"
+
+# 리뷰 H1: 0바이트 사본은 "없음"으로 보고 채운다
+setup; for f in $FILES; do echo "live:$f" > "$T/dl/$f"; done; : > "$T/dl/t33a_relay.sh"; run
+[ "$(cat "$T/dl/t33a_relay.sh")" = "repo:t33a_relay.sh" ] && pass "0바이트 사본은 레포 사본으로 채움" || fail "0바이트 사본"
+
+# 리뷰 H1: cp 가 앞부분만 쓰고 실패하면 잘린 사본을 남기지 않고, 다음 틱에 다시 시도한다
+setup; printf 'repo:%%s\n' $(seq 1 500) > "$T/repo/t33a_relay.sh"
+mkdir -p "$T/bin"; printf '#!/bin/bash\nhead -c 12 "$1" > "$2"; exit 1\n' > "$T/bin/cp"; chmod +x "$T/bin/cp"
+bash -c "PATH='$T/bin':\$PATH; LOG='$T/log'; REPO_SCRIPTS='$T/repo'; DL_DIR='$T/dl'; _RESTORE_WARNED=' '
+$fn
+restore_missing_scripts"
+[ ! -e "$T/dl/t33a_relay.sh" ] && [ -z "$(ls -A "$T/dl" | grep restore)" ] \
+  && pass "cp 중간 실패면 사본도 임시 파일도 남기지 않음" || fail "잘린 사본 잔존 ($(ls -la "$T/dl" | tr '\n' '|'))"
+grep -q 't33a_relay.sh 가 다운로드 폴더에 없음 — 복구 못함: 복사 실패' "$T/log" && pass "복사 실패는 레포 사본 없음과 구분해 기록" || fail "복사 실패 문구"
+run
+cmp -s "$T/repo/t33a_relay.sh" "$T/dl/t33a_relay.sh" && pass "다음 틱(정상 cp)에 온전히 복구" || fail "재시도 복구"
+
+# cp 는 성공했다고 하는데 내용이 다르면(잘림) 채택하지 않는다
+setup; printf '#!/bin/bash\nhead -c 3 "$1" > "$2"; exit 0\n' > "$T/bin/cp"
+bash -c "PATH='$T/bin':\$PATH; LOG='$T/log'; REPO_SCRIPTS='$T/repo'; DL_DIR='$T/dl'; _RESTORE_WARNED=' '
+$fn
+restore_missing_scripts"
+[ ! -e "$T/dl/t33a_boot.sh" ] && pass "cp 가 성공을 돌려도 원본과 다르면 채택하지 않음" || fail "내용 대조 없음"
+rm -rf "$T/bin"
 
 # 배선: 시작 때(로그 새로 쓴 뒤)와 watchdog 매 틱에 부른다
 start_ln=$(grep -nE '^restore_missing_scripts( |$)' "$SRC" | head -1 | cut -d: -f1)   # 정의 줄(`…() {`)은 제외
