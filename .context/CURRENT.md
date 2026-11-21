@@ -7,7 +7,8 @@
 - 즉시 복구: 포트 병렬 탐색(30000~49999)으로 TLS 포트 발견 → connect → 맥 데몬이 tcpip 5555 → 스크립트 4종 + `T33A_status_wrapper` 재배포(md5 = main 일치) → `t33a-revive.sh` 09:13 ✅(status=waiting, remap 2). 09:19 의장 외출 뒤 Tailscale 중계(셀룰러)로 5555 접속·relay 생존 확인.
 - 수리(PR #6): 맥 데몬 v8 `tls_endpoints()` — adb 목록에 이 폰이 없으면 `dns-sd` browse→lookup→주소 조회, 사설·CGNAT 대역만. `dnssd_run` 은 서브셸이라 신호로 죽어도 dns-sd 를 남기지 않는다. 시험 `tests/tls_endpoints_test.sh` 17건(ensure_device 배선 포함).
 - e2e 판정: **판정 불가(수동 개입)** — 의장이 무선 디버깅을 손으로 켰다. 10-25 수리(WADB Keeper 되살리기)의 실재부팅 검증은 여전히 미완.
-- 미검증·남은 것: ①수리본의 실폰 라이브 실행(시험 시점에 폰이 집 Wi-Fi 이탈 — 09:14 실측 출력 재생으로만 확인) ②집 밖에서 재부팅되면 mDNS 가 닿지 않아 맥이 못 찾는다(Tailscale 쪽 포트 탐색 폴백은 미구현) ③09:19:14 Tailscale 후보를 "시리얼 불일치"로 한 번 끊음 — 직접 조회는 일치, 막 붙은 중계 링크에서 빈 응답을 불일치로 본 것으로 추정(다음 주기 재시도라 비치명) ④폰 Termux 쪽 `~/t33a-remapper`·`~/.termux/boot/t33a_boot.sh` 는 손대지 않음(다운로드 폴더 사본만 복구).
+- 미검증·남은 것: ①수리본의 실폰 라이브 실행(시험 시점에 폰이 집 Wi-Fi 이탈 — 09:14 실측 출력 재생으로만 확인) ②집 밖에서 재부팅되면 mDNS 가 닿지 않아 맥이 못 찾는다(Tailscale 쪽 포트 탐색 폴백은 미구현) ③09:19:14 Tailscale 후보를 "시리얼 불일치"로 한 번 끊음 — 직접 조회는 일치, 막 붙은 중계 링크에서 빈 응답을 불일치로 본 것으로 추정(다음 주기 재시도라 비치명; 09:20:30 자력 회복) ④~~폰 Termux 쪽 사본 미확인~~ → 10:11 폰 auto_pull 이 PR #6 머지(`e72d13d`)를 스스로 받아 update 실행 = Termux 레포 사본 건강.
+- 후속 수리(PR #7, 원인 ② 재발 방지): 폰 `t33a_boot.sh` `restore_missing_scripts()` — 시작 때와 watchdog 매 틱에 다운로드 폴더 사본 5개(boot·relay·start·status·상태 위젯 래퍼)를 확인하고 없으면 Termux 레포 사본에서 채운다. 있는 파일은 덮지 않음, 레포 사본도 없으면 파일당 경고 1회. 시험 `tests/boot_restore_scripts_test.sh` 11건, 손 변이 8종 전부 잡힘.
 
 ## 🟡 2026-10-25 — 재부팅 30시간 다운 원인 = WADB Keeper 비활성화 → relay 가 되살림 + 집·회사 Wi-Fi 정책 (PR #5 머지 `9fd58c1`)
 - 증상: 10-24 10:32 재부팅 뒤 리매퍼 미복구(heartbeat 110,735s). 폰 Termux watchdog 은 2분마다 WADB Keeper 킥을 쐈고 `result=0` 이었지만 무선 디버깅은 꺼진 채 → 맥이 붙을 길 없음. 의장이 무선 디버깅 수동 ON → 17:16:28 맥 데몬이 12초 만에 복구.
