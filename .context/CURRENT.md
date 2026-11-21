@@ -1,5 +1,14 @@
 # Current Status
 
+## 🟡 2026-11-21 — 재부팅 뒤 미복구 2겹: 맥 adb 탐색 실명 + 폰 스크립트 삭제 (PR #6)
+- 증상: 08:33 무렵 재부팅(uptime 역산), 09:06 잠금해제 뒤에도 미복구. 폰 watchdog 은 2분마다 WADB Keeper 킥을 쐈지만 loopback 5555 가 "Connection refused" 라 relay 를 못 띄움. 맥 데몬은 02:44 "폰 접속 불가" 이후 무기록.
+- 원인 ①(실측): 폰은 `_adb-tls-connect` 를 광고 중(`dns-sd -B` 로 `adb-<시리얼>-…` 확인)인데 `adb mdns services` 는 0건. 새로 띄운 서버(5038)·`ADB_MDNS_OPENSCREEN=0` 서버(5039)도 0건 → 낡은 서버 문제가 아니라 adb 37.0.2(10-30 설치) 자체. 10-25 재부팅 때는 같은 경로로 12초 복구였다. 재부팅하면 5555 가 닫혀 TLS 접속점이 유일한 길인데 그 탐색이 adb 에만 의존했다.
+- 원인 ②(실측): 폰 `/sdcard/Download` 에 `t33a_{boot,relay,start,status}.sh` 가 없었다(.bak·.new 만 잔존). hsc 기록상 11-14 22:57 의장의 다운로드 폴더 수동 정리 때 hsc 코드와 함께 지워진 것으로 추정. 이미 떠 있던 프로세스로 11-20 까지 버티다 재부팅 뒤 띄울 파일이 없었다. 맥 데몬이 5555 를 연 뒤 relay 재기동이 "복구 실패 — 위젯 탭 필요"(09:13:15)로 끝난 이유.
+- 즉시 복구: 포트 병렬 탐색(30000~49999)으로 TLS 포트 발견 → connect → 맥 데몬이 tcpip 5555 → 스크립트 4종 + `T33A_status_wrapper` 재배포(md5 = main 일치) → `t33a-revive.sh` 09:13 ✅(status=waiting, remap 2). 09:19 의장 외출 뒤 Tailscale 중계(셀룰러)로 5555 접속·relay 생존 확인.
+- 수리(PR #6): 맥 데몬 v8 `tls_endpoints()` — adb 목록에 이 폰이 없으면 `dns-sd` browse→lookup→주소 조회, 사설·CGNAT 대역만. `dnssd_run` 은 서브셸이라 신호로 죽어도 dns-sd 를 남기지 않는다. 시험 `tests/tls_endpoints_test.sh` 17건(ensure_device 배선 포함).
+- e2e 판정: **판정 불가(수동 개입)** — 의장이 무선 디버깅을 손으로 켰다. 10-25 수리(WADB Keeper 되살리기)의 실재부팅 검증은 여전히 미완.
+- 미검증·남은 것: ①수리본의 실폰 라이브 실행(시험 시점에 폰이 집 Wi-Fi 이탈 — 09:14 실측 출력 재생으로만 확인) ②집 밖에서 재부팅되면 mDNS 가 닿지 않아 맥이 못 찾는다(Tailscale 쪽 포트 탐색 폴백은 미구현) ③09:19:14 Tailscale 후보를 "시리얼 불일치"로 한 번 끊음 — 직접 조회는 일치, 막 붙은 중계 링크에서 빈 응답을 불일치로 본 것으로 추정(다음 주기 재시도라 비치명) ④폰 Termux 쪽 `~/t33a-remapper`·`~/.termux/boot/t33a_boot.sh` 는 손대지 않음(다운로드 폴더 사본만 복구).
+
 ## 🟡 2026-10-25 — 재부팅 30시간 다운 원인 = WADB Keeper 비활성화 → relay 가 되살림 + 집·회사 Wi-Fi 정책 (PR #5 머지 `9fd58c1`)
 - 증상: 10-24 10:32 재부팅 뒤 리매퍼 미복구(heartbeat 110,735s). 폰 Termux watchdog 은 2분마다 WADB Keeper 킥을 쐈고 `result=0` 이었지만 무선 디버깅은 꺼진 채 → 맥이 붙을 길 없음. 의장이 무선 디버깅 수동 ON → 17:16:28 맥 데몬이 12초 만에 복구.
 - 원인(실측): WADB Keeper 가 `enabled=4`(DISABLED_UNTIL_USED, 삼성/안드로이드의 미사용 앱 처리 추정). 이 상태면 킥이 성공으로 돌아와도 플래그 0 그대로. 셸 `pm enable` 은 권한 거부, **앱 화면(`.Main`) 1회 실행으로 4→0** 복귀, 이후 킥 0→1 확인.
